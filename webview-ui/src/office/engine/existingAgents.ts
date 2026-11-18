@@ -53,6 +53,11 @@ export interface ExistingAgentsOffice {
  */
 export function restoreAgent(os: ExistingAgentsOffice, p: PendingAgent): void {
   os.addAgent(p.id, p.palette, p.repeat, p.seatId, true, p.directoryName);
+  // agentCreated can arrive before layoutLoaded. Its provisional character
+  // survives the rebuild, so addAgent alone is a no-op. Apply the snapshot
+  // again now that the real catalog/layout seats exist; syncAgent never steals
+  // a seat assigned to another character.
+  os.syncAgent(p.id, p.palette, p.repeat, p.seatId);
   if (p.isHeadless) os.setHeadless(p.id, true);
   os.restAgent(p.id);
 }

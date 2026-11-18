@@ -18,7 +18,7 @@ import type {
   InheritedProps,
   ManifestGroup,
 } from '../../core/src/assets/manifestUtils.js';
-import { flattenManifest } from '../../core/src/assets/manifestUtils.js';
+import { flattenManifest, furnitureVisualProps } from '../../core/src/assets/manifestUtils.js';
 import {
   decodeCharacterPng,
   decodeFloorPng,
@@ -110,6 +110,8 @@ export async function loadFurnitureAssets(workspaceRoot: string): Promise<Loaded
           assets = [
             {
               id: manifest.id,
+              ...furnitureVisualProps(manifest),
+              ...(manifest.orientation ? { orientation: manifest.orientation } : {}),
               name: manifest.name,
               label: manifest.name,
               category: manifest.category,

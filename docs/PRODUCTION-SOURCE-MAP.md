@@ -1,5 +1,12 @@
 # Production source map and integration checklist
 
+> **Later source-sync update:** the documentation-only status described below is
+> the earlier publication checkpoint. The subsequent source sync includes the
+> production runtime minus private bridge changes. See
+> [SOURCE-SYNC-2026-11-18.md](SOURCE-SYNC-2026-11-18.md) for current distribution
+> scope, portability adjustments and validation. Historical receipts below remain
+> historical evidence, not tests of the new public build.
+
 This is a map of the inspected production delta relative to the November 11
 public source commit `a4dd21fecba2d01837bdee6973fe2d9683756a5a`. Paths below refer
 to the retained **production source**, not promises that these modules already

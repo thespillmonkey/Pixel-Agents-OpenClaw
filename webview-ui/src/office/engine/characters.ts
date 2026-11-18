@@ -12,13 +12,18 @@ import {
   WANDER_PAUSE_MAX_SEC,
   WANDER_PAUSE_MIN_SEC,
 } from '../../constants.js';
+import { jungleSprite } from '../jungleRuntime.js';
 import { findPath } from '../layout/tileMap.js';
+import { LIBRARY_WORK_SEAT } from '../libraryRuntime.js';
+import { serviceSprite } from '../serviceRuntime.js';
 import type { CharacterSprites } from '../sprites/spriteData.js';
 import { getCharacterSprites } from '../sprites/spriteData.js';
 import { isReadingToolName } from '../toolUtils.js';
 import type { Character, Seat, SpriteData, TileType as TileTypeVal } from '../types.js';
 import { CharacterState, Direction, TILE_SIZE } from '../types.js';
 import { startBlink } from './blink.js';
+import { toyPose } from './idlePlay.js';
+import { standingPlay } from './playMotion.js';
 
 /** Whether a tool should show the reading animation (vs typing). Taxonomy comes
  *  from the active HookProvider via the `providerCapabilities` message. */
@@ -156,7 +161,8 @@ export function updateCharacter(
             ch.frame = 0;
             ch.frameTimer = 0;
           } else {
-            // Already at seat or no path — sit down
+            // Work never starts at a toy or an unreachable fallback position.
+            if (ch.tileCol !== seat.seatCol || ch.tileRow !== seat.seatRow) break;
             ch.state = CharacterState.TYPE;
             ch.dir = seat.facingDir;
             ch.frame = 0;
@@ -301,7 +307,7 @@ export function updateCharacter(
 }
 
 /** Move along `ch.path` for one frame; on reaching a tile, make it the character's tile. */
-function stepAlongPath(ch: Character, dt: number): void {
+export function stepAlongPath(ch: Character, dt: number): void {
   const nextTile = ch.path[0];
   ch.dir = directionBetween(ch.tileCol, ch.tileRow, nextTile.col, nextTile.row);
 
@@ -419,10 +425,23 @@ function settle(ch: Character, facing: Direction | null): void {
 
 /** Get the correct sprite frame for a character's current state and direction */
 export function getCharacterSprite(ch: Character, sprites: CharacterSprites): SpriteData {
+  if (ch.state === CharacterState.PLAY)
+    return (
+      standingPlay(ch) ??
+      toyPose(serviceSprite(ch) ?? jungleSprite(ch) ?? sprites.walk[ch.dir][1], ch.frame)
+    );
+  const service = serviceSprite(ch);
+  if (service) return service;
+  const jungle = jungleSprite(ch);
+  if (jungle) return jungle;
   switch (ch.state) {
     case CharacterState.TYPE:
       // Resting in its chair (a turn over, or back from wandering). Helpers have no
       // chair: they stand once idle, and keep typing through the gaps between tools.
+      if (ch.seatId === LIBRARY_WORK_SEAT)
+        return ch.isActive
+          ? sprites.typing[ch.dir][ch.frame % sprites.typing[ch.dir].length]
+          : sprites.walk[ch.dir][1];
       if (!ch.isActive && !ch.isSubagent) return sprites.seated[ch.dir];
       if (isReadingTool(ch.currentTool)) {
         return sprites.reading[ch.dir][ch.frame % sprites.reading[ch.dir].length];
@@ -453,7 +472,10 @@ function randomInt(min: number, max: number): number {
 /** Activity-specific timing also applies to upstream helper characters. */
 function advanceWorkAnimation(ch: Character): void {
   const sprites = getCharacterSprites(ch.palette, ch.repeat);
-  const frames = isReadingTool(ch.currentTool) ? sprites.reading[ch.dir] : sprites.typing[ch.dir];
+  const frames =
+    ch.seatId !== LIBRARY_WORK_SEAT && isReadingTool(ch.currentTool)
+      ? sprites.reading[ch.dir]
+      : sprites.typing[ch.dir];
   ch.frame %= frames.length;
   const duration = frames.length === 48 ? 0.1 : TYPE_FRAME_DURATION_SEC;
   if (frames.length === 48) {

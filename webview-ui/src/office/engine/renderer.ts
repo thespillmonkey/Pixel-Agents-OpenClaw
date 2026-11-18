@@ -42,10 +42,13 @@ import {
   VOID_TILE_DASH_PATTERN,
   VOID_TILE_OUTLINE_COLOR,
 } from '../../constants.js';
-import { characterSittingOffset } from '../characterAlignment.js';
+import { characterSittingOffset, characterSittingOffsetX } from '../characterAlignment.js';
+import { clinicDepth } from '../clinicRuntime.js';
 import type { SelectionButton } from '../editor/editorState.js';
 import { getColorizedFloorSprite, hasFloorSprites, WALL_COLOR } from '../floorTiles.js';
+import { nsiDepth } from '../nsiRuntime.js';
 import { mapOffset } from '../projection.js';
+import { serviceCharacterDepth } from '../serviceRuntime.js';
 import {
   getCarpetJunctionSprite,
   getCarpetPaletteKey,
@@ -364,13 +367,44 @@ export function renderScene(
 ): void {
   const drawables: ZDrawable[] = [];
 
+  // Named owner-background fixtures must sit above their room wall art, not merely
+  // receive a small depth key (positive-depth wall sprites would paint over them).
+  // Walls behind a decorative finish also belong in this environment pass, including
+  // gaps between fixtures; otherwise those tiles repaint a shifted-looking strip over
+  // the finish. Unrelated walls retain native depth occlusion.
+  const backgrounds = furniture.filter((f) => f.sceneLayer === 'background');
+  const wallFinishes = furniture.filter((f) => f.sceneLayer === 'wall-finish');
+  const wallBackdrops = [...backgrounds, ...wallFinishes];
+  const floorDrawables: ZDrawable[] = [];
+  const environmentWalls: ZDrawable[] = [];
+  const finishDrawables: ZDrawable[] = [];
+  const backgroundDrawables: ZDrawable[] = [];
+  const overlapsBackdrop = (f: FurnitureInstance) =>
+    wallBackdrops.some(
+      (b) =>
+        f.x < b.x + (b.sprite[0]?.length ?? 0) &&
+        f.x + (f.sprite[0]?.length ?? 0) > b.x &&
+        f.y < b.y + b.sprite.length &&
+        f.y + f.sprite.length > b.y,
+    );
+
   // Furniture
   for (const f of furniture) {
+    const target =
+      f.sceneLayer === 'floor'
+        ? floorDrawables
+        : f.sceneLayer === 'background'
+          ? backgroundDrawables
+          : f.sceneLayer === 'wall-finish'
+            ? finishDrawables
+            : f.sceneLayer === 'wall' && overlapsBackdrop(f)
+              ? environmentWalls
+              : drawables;
     const cached = getCachedSprite(f.sprite, zoom);
     const fx = offsetX + f.x * zoom;
     const fy = offsetY + f.y * zoom;
     if (f.mirrored) {
-      drawables.push({
+      target.push({
         zY: f.zY,
         draw: (c) => {
           c.save();
@@ -381,13 +415,21 @@ export function renderScene(
         },
       });
     } else {
-      drawables.push({
+      target.push({
         zY: f.zY,
         draw: (c) => {
           c.drawImage(cached, fx, fy);
         },
       });
     }
+  }
+
+  // Explicit environment order: floor patches, native walls, decorative finishes, fixtures.
+  // Wall art is drawn exactly once (no translucent double-paint); the remaining
+  // scene keeps its existing z-sort, including chairs and walls away from fixtures.
+  for (const layer of [floorDrawables, environmentWalls, finishDrawables, backgroundDrawables]) {
+    layer.sort((a, b) => a.zY - b.zY);
+    for (const d of layer) d.draw(ctx);
   }
 
   // Characters
@@ -398,13 +440,19 @@ export function renderScene(
     // Sitting offset: shift character down when seated so they visually sit in the chair
     const sittingOffset = characterSittingOffset(ch);
     // Anchor at bottom-center of character — round to integer device pixels
-    const drawX = Math.round(offsetX + ch.x * zoom - cached.width / 2);
+    const drawX = Math.round(
+      offsetX + (ch.x + characterSittingOffsetX(ch)) * zoom - cached.width / 2,
+    );
     const drawY = Math.round(offsetY + (ch.y + sittingOffset) * zoom - cached.height);
 
     // Sort characters by bottom of their tile (not center) so they render
     // in front of same-row furniture (e.g. chairs) but behind furniture
     // at lower rows (e.g. desks, bookshelves that occlude from below).
-    const charZY = ch.y + TILE_SIZE / 2 + CHARACTER_Z_SORT_OFFSET;
+    const charZY =
+      clinicDepth(ch) ??
+      nsiDepth(ch) ??
+      serviceCharacterDepth(ch) ??
+      ch.y + TILE_SIZE / 2 + CHARACTER_Z_SORT_OFFSET;
 
     // Headless agents (adopted, no terminal to focus) render translucent while
     // the "Display headless as ghosts" setting is on.
@@ -900,7 +948,75 @@ export function renderFrame(
   }
 
   // Build wall instances for z-sorting with furniture and characters
-  const wallInstances = hasWallSprites() ? getWallInstances(tileMap, tileColors, layoutCols) : [];
+  const expandedMitsuki = furniture.some(
+    (f) => f.x === 272 && f.y === 16 && f.sprite.length === 208 && f.sprite[0]?.length === 224,
+  );
+  const authoredClinic = furniture.some(
+    (f) => f.x === 768 && f.y === 0 && f.sprite.length === 48 && f.sprite[0]?.length === 128,
+  );
+  const authoredNsi = furniture.some(
+    (f) => f.x === 512 && f.y === 0 && f.sprite.length === 240 && f.sprite[0]?.length === 256,
+  );
+  const authoredLibrary = furniture.some((f) => f.libraryRoom);
+  const authoredJungle = furniture.some((f) => f.x === 0 && f.y === 288 && f.sprite.length === 320);
+  const jungleCols = authoredJungle
+    ? Math.round(
+        furniture.find((f) => f.x === 0 && f.y === 288 && f.sprite.length === 320)!.sprite[0]
+          .length / TILE_SIZE,
+      )
+    : 0;
+  const authoredBreak = furniture.some(
+    (f) => f.x === 592 && f.y === 288 && f.sprite.length === 320 && f.sprite[0]?.length === 304,
+  );
+  const authoredHall = furniture.some(
+    (f) => f.x === 0 && f.y === 240 && f.sprite.length === 48 && f.sprite[0]?.length === 896,
+  );
+  const authoredTrio = furniture.some(
+    (f) => f.x === 272 && f.y === 288 && f.sprite.length === 320 && f.sprite[0]?.length === 320,
+  );
+  const wallInstances = (hasWallSprites() ? getWallInstances(tileMap, tileColors, layoutCols) : [])
+    .map((f) => {
+      // The expanded office reaches world y=0; trim only the native cap's
+      // above-map overhang so its visible ceiling aligns with the authored library.
+      const col = f.x / TILE_SIZE,
+        row = f.zY / TILE_SIZE - 1;
+      if (expandedMitsuki && col >= 16 && col <= 31 && row === 14)
+        return {
+          ...f,
+          sprite: Array.from(
+            { length: TILE_SIZE },
+            (_, y) => f.sprite[Math.floor((y * f.sprite.length) / TILE_SIZE)],
+          ),
+          y: 14 * TILE_SIZE,
+        };
+      return expandedMitsuki && col >= 16 && col <= 31 && row === 0 && f.y < 0
+        ? { ...f, sprite: f.sprite.slice(-f.y), y: 0 }
+        : f;
+    })
+    .filter((f) => {
+      if (!authoredLibrary) return true;
+      const col = f.x / TILE_SIZE,
+        row = f.zY / TILE_SIZE - 1;
+      return !(
+        (authoredHall && col >= 0 && col <= 55 && row >= 15 && row <= 17) ||
+        (authoredBreak &&
+          ((col >= 37 && col <= 55 && row >= 18 && row <= 37) ||
+            (col === 55 && (row === 15 || row === 16)))) ||
+        (authoredClinic && col >= 48 && col <= 55 && row >= 0 && row <= 14) ||
+        (authoredNsi && col >= 32 && col <= 47 && row >= 0 && row <= 14) ||
+        (authoredJungle && col >= 0 && col < jungleCols && row >= 18 && row <= 37) ||
+        (authoredTrio && col >= 17 && col <= 36 && row >= 18 && row <= 37) ||
+        (col >= 0 && col <= 15 && row >= 0 && row <= 14) ||
+        (row === 17 && col >= 5 && col <= (authoredClinic ? 56 : 48)) ||
+        ((row === 15 || row === 16) && (col === 5 || col === (authoredClinic ? 56 : 48))) ||
+        (row === 14 &&
+          (authoredNsi
+            ? col === 48
+            : expandedMitsuki
+              ? col === 28 || col === 29
+              : col === 14 || col === 15))
+      );
+    });
   const allFurniture = wallInstances.length > 0 ? [...wallInstances, ...furniture] : furniture;
 
   // Draw walls + furniture + characters (z-sorted)

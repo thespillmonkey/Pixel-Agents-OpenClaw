@@ -2,6 +2,9 @@ import type { FurnitureCatalogEntry, SpriteData } from '../types.js';
 
 export interface LoadedAssetData {
   catalog: Array<{
+    drawOffsetX?: number;
+    drawOffsetY?: number;
+    renderLayer?: 'floor';
     id: string;
     label: string;
     category: string;
@@ -73,7 +76,7 @@ export function buildDynamicCatalog(assets: LoadedAssetData): boolean {
 
   // Build all entries (including non-front variants)
   const allEntries = assets.catalog
-    .map((asset) => {
+    .map((asset): CatalogEntryWithCategory | null => {
       const sprite = assets.sprites[asset.id];
       if (!sprite) {
         console.warn(`No sprite data for asset ${asset.id}`);
@@ -81,6 +84,9 @@ export function buildDynamicCatalog(assets: LoadedAssetData): boolean {
       }
       return {
         type: asset.id,
+        drawOffsetX: asset.drawOffsetX,
+        drawOffsetY: asset.drawOffsetY,
+        renderLayer: asset.renderLayer,
         label: asset.label,
         footprintW: asset.footprintW,
         footprintH: asset.footprintH,

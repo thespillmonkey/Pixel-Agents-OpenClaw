@@ -1,11 +1,24 @@
 import type { ColorValue } from './components/ui/types.js';
+import { characterSittingOffset, characterSittingOffsetX } from './office/characterAlignment.js';
 import { OfficeState } from './office/engine/officeState.js';
 import { isGhostHeadlessAgentsEnabled } from './office/engine/renderer.js';
+import { junglePhase } from './office/jungleRuntime.js';
 import { carpetJunctionCase } from './office/sprites/carpetTiles.js';
 
 declare global {
   interface Window {
     __pixelAgentsTestHooks?: {
+      advanceSimulation?: (seconds: number) => void;
+      getIdlePlay?: () => {
+        targets: Array<{ uid: string; col: number; row: number }>;
+        sessions: Array<{
+          id: number;
+          toyId: string;
+          phase: string;
+          remaining: number;
+          anchor: { col: number; row: number };
+        }>;
+      };
       playedSounds?: Array<{ kind: string; at: number }>;
       getCharacters?: () => Array<{
         id: number;
@@ -142,6 +155,28 @@ export function installTestHooks(officeStateRef: { current: OfficeState | null }
   const hooks = window.__pixelAgentsTestHooks;
   if (!hooks.addAgentLog) hooks.addAgentLog = [];
 
+  if ((window as Window & { __PIXEL_AGENTS_E2E?: boolean }).__PIXEL_AGENTS_E2E)
+    hooks.advanceSimulation = (seconds) => {
+      if (!Number.isFinite(seconds) || seconds < 0 || seconds > 120)
+        throw new Error('Bounded test clock only');
+      const os = officeStateRef.current;
+      if (os) for (let t = 0; t < seconds; t += 0.05) os.update(Math.min(0.05, seconds - t));
+    };
+  hooks.getIdlePlay = () => {
+    const os = officeStateRef.current;
+    return {
+      targets:
+        os?.idlePlay
+          .getTargets()
+          .map((t) => ({ uid: t.uid, col: t.anchor.col, row: t.anchor.row })) ?? [],
+      sessions: os
+        ? [...os.characters.keys()].flatMap((id) => {
+            const s = os.idlePlay.getState(id);
+            return s ? [{ id, ...s }] : [];
+          })
+        : [],
+    };
+  };
   hooks.getCharacters = () => {
     const os = officeStateRef.current;
     if (!os) return [];
@@ -149,6 +184,20 @@ export function installTestHooks(officeStateRef: { current: OfficeState | null }
     // which lives outside the agent map and joins only at the render seam.
     return os.getCharacters().map((ch) => ({
       id: ch.id,
+      tileCol: ch.tileCol,
+      tileRow: ch.tileRow,
+      path: ch.path.map((p) => ({ ...p })),
+      moveProgress: ch.moveProgress,
+      dir: ch.dir,
+      junglePhase: junglePhase(),
+      x: ch.x,
+      y: ch.y,
+      visualX: ch.x + characterSittingOffsetX(ch),
+      visualY: ch.y + characterSittingOffset(ch),
+      state: ch.state,
+      frame: ch.frame,
+      isActive: ch.isActive,
+      seatId: ch.seatId,
       matrixEffect: ch.matrixEffect,
       agentName: ch.agentName,
       bubbleType: ch.bubbleType,

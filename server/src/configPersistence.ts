@@ -72,6 +72,8 @@ export interface UserDirectory {
 export interface PixelAgentsConfig {
   /** Fixed sprite content identity, keyed by exact persistent agent name. Missing means random. */
   agentAppearances: Record<string, string>;
+  /** Persistent work location by exact agent identity; absent leaves ordinary seat behavior. */
+  primaryWorkSeats?: Record<string, string>;
   vscode: AdapterSettings;
   standalone: AdapterSettings;
   externalAssetDirectories: string[];
@@ -285,6 +287,7 @@ export function readConfig(): PixelAgentsConfig {
     const parsed = JSON.parse(raw) as Partial<PixelAgentsConfig>;
     return {
       agentAppearances: parseAgentAppearances(parsed.agentAppearances),
+      primaryWorkSeats: parsePrimaryWorkSeats(parsed.primaryWorkSeats),
       vscode: parseAdapterSettings(parsed.vscode),
       standalone: parseAdapterSettings(parsed.standalone),
       externalAssetDirectories: Array.isArray(parsed.externalAssetDirectories)
@@ -424,4 +427,18 @@ export function writeConfig(config: PixelAgentsConfig): boolean {
     console.error('[Pixel Agents] Failed to write config file:', err);
     return false;
   }
+}
+
+/** Bounded inert seat IDs only; no numeric/session identity coupling. */
+export function parsePrimaryWorkSeats(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return Object.fromEntries(
+    Object.entries(raw).filter(
+      ([name, seat]) =>
+        name.length > 0 &&
+        name.length <= 512 &&
+        typeof seat === 'string' &&
+        /^[A-Za-z0-9_:-]{1,128}$/.test(seat),
+    ),
+  );
 }

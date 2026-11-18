@@ -30,6 +30,7 @@ export const CharacterState = {
   IDLE: 'idle',
   WALK: 'walk',
   TYPE: 'type',
+  PLAY: 'play',
 } as const;
 export type CharacterState = (typeof CharacterState)[keyof typeof CharacterState];
 
@@ -57,6 +58,10 @@ export interface Seat {
 }
 
 export interface FurnitureInstance {
+  /** Scoped authored castle walls replace native wall art in the library/hall only. */
+  libraryRoom?: boolean;
+  /** Explicit environment passes. Walls not behind a background fixture retain native depth. */
+  sceneLayer?: 'floor' | 'background' | 'wall' | 'wall-finish';
   sprite: SpriteData;
   /** Pixel x (top-left) */
   x: number;
@@ -93,6 +98,9 @@ export const EditTool = {
 export type EditTool = (typeof EditTool)[keyof typeof EditTool];
 
 export interface FurnitureCatalogEntry {
+  drawOffsetX?: number;
+  drawOffsetY?: number;
+  renderLayer?: 'floor';
   type: string; // asset ID from furniture manifest
   label: string;
   footprintW: number;
@@ -176,6 +184,7 @@ export interface Blinker {
 }
 
 export interface Character extends Blinker {
+  playVisualOffset?: { x: number; y: number };
   id: number;
   state: CharacterState;
   dir: Direction;
@@ -209,6 +218,7 @@ export interface Character extends Blinker {
   wanderLimit: number;
   /** Whether the agent is actively working */
   isActive: boolean;
+  activityUnknown?: boolean;
   /** Assigned seat uid, or null if no seat */
   seatId: string | null;
   /** Active speech bubble type, or null if none showing */

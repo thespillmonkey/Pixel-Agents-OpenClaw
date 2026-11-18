@@ -635,6 +635,11 @@ export function useExtensionMessages(
           return { ...prev, [id]: status };
         });
         os.setAgentActive(id, status === 'active');
+        const statusCharacter = os.characters.get(id);
+        if (statusCharacter) {
+          statusCharacter.activityUnknown = status === 'unknown';
+          if (status === 'unknown' || status === 'idle') statusCharacter.bubbleType = null;
+        }
         if (status === 'waiting') {
           os.showWaitingBubble(id, msg.awaitingInput === true);
           playDoneSound();

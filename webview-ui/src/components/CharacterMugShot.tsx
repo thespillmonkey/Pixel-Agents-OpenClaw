@@ -6,6 +6,7 @@ import {
   MUGSHOT_CROP_TOP_ROW,
   MUGSHOT_RENDER_ZOOM,
 } from '../constants.js';
+import { junglePortrait } from '../office/jungleRuntime.js';
 import { getCachedSprite } from '../office/sprites/spriteCache.js';
 import {
   getCharacterSprites,
@@ -15,6 +16,7 @@ import {
 import { Direction } from '../office/types.js';
 
 interface CharacterMugShotProps {
+  jungleName?: string;
   palette: number;
   repeat: number;
   /** Sprite pixels to CSS pixels, a whole number. Defaults to MUGSHOT_RENDER_ZOOM. */
@@ -32,6 +34,7 @@ interface CharacterMugShotProps {
  * the character sprites are replaced, so a mounted mug shot never goes stale.
  */
 export function CharacterMugShot({
+  jungleName,
   palette,
   repeat,
   zoom = MUGSHOT_RENDER_ZOOM,
@@ -47,7 +50,8 @@ export function CharacterMugShot({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const front = getCharacterSprites(palette, repeat).walk[Direction.DOWN][0];
+    const front =
+      junglePortrait(jungleName) ?? getCharacterSprites(palette, repeat).walk[Direction.DOWN][0];
     const full = getCachedSprite(front, zoom);
 
     const side = MUGSHOT_CROP_SIDE_PX * zoom;
@@ -56,7 +60,7 @@ export function CharacterMugShot({
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, side, side);
     ctx.drawImage(full, MUGSHOT_CROP_LEFT_COL * zoom, cropTop * zoom, side, side, 0, 0, side, side);
-  }, [palette, repeat, zoom, cropTop, sprites]);
+  }, [jungleName, palette, repeat, zoom, cropTop, sprites]);
 
   return (
     <canvas

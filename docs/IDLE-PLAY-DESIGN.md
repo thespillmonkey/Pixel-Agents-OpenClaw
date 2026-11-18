@@ -1,5 +1,12 @@
 # Idle play — deployed design and animation contract
 
+> **Later source-sync update:** the documentation-only status described below is
+> the earlier publication checkpoint. The subsequent source sync includes the
+> production runtime minus private bridge changes. See
+> [SOURCE-SYNC-2026-11-18.md](SOURCE-SYNC-2026-11-18.md) for current distribution
+> scope, portability adjustments and validation. Historical receipts below remain
+> historical evidence, not tests of the new public build.
+
 Status: production design as of November 18, 2026. This document describes the
 later deployed implementation; it does not add that implementation to this public
 source snapshot. See [publication scope and validation](PRODUCTION-DELTA-2026-11-18.md).

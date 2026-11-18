@@ -15,8 +15,8 @@ export const WANDER_PAUSE_MIN_SEC = 2.0;
 export const WANDER_PAUSE_MAX_SEC = 20.0;
 export const WANDER_MOVES_BEFORE_REST_MIN = 3;
 export const WANDER_MOVES_BEFORE_REST_MAX = 6;
-export const SEAT_REST_MIN_SEC = 120.0;
-export const SEAT_REST_MAX_SEC = 240.0;
+export const SEAT_REST_MIN_SEC = 30.0;
+export const SEAT_REST_MAX_SEC = 30.0;
 /** A helper (sub-agent) stays within this many tiles of its lead, any direction. */
 export const HELPER_FOLLOW_RADIUS_TILES = 2;
 /** A helper between two tool calls keeps sitting; it stands only after waiting this long. */

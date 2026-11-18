@@ -16,6 +16,9 @@ export interface AssetIndex {
 }
 
 export interface CatalogEntry {
+  drawOffsetX?: number;
+  drawOffsetY?: number;
+  renderLayer?: 'floor';
   id: string;
   name: string;
   label: string;

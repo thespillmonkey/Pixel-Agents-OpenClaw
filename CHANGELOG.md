@@ -1,3 +1,19 @@
+# Fork source synchronization — November 18, 2026
+
+- Import the deployed frontend room/character runtimes, native animation data,
+  explicit furniture layering/collision handling, supported props, fractional-zoom
+  rasterization and seated alignment fixes.
+- Include 30-second rests, randomized free-toy selection, immediate work
+  interruption, paired air-hockey/foosball and standing-play/toy overlays.
+- Include stable primary workstation persistence, buffered seat restoration,
+  asset visual metadata and asset-pack settings disclosure.
+- Preserve the public metadata-only, one-to-one OpenClaw bridge; omit the private
+  production mirror, projection-status field and hook/resend wiring.
+- Preserve existing publication-workflow guards and upstream attribution. No
+  npm/Marketplace release, private runtime state or external office pack is added.
+- See [source-sync notes](docs/SOURCE-SYNC-2026-11-18.md) for test portability,
+  validation results, asset prerequisites and the precise production differences.
+
 # Fork documentation update — November 18, 2026
 
 - Consolidate post-integration production differential notes: authored rooms,

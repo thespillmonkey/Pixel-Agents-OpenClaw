@@ -1,5 +1,12 @@
 # Production differential notes — November 18, 2026
 
+> **Later source-sync update:** the documentation-only status described below is
+> the earlier publication checkpoint. The subsequent source sync includes the
+> production runtime minus private bridge changes. See
+> [SOURCE-SYNC-2026-11-18.md](SOURCE-SYNC-2026-11-18.md) for current distribution
+> scope, portability adjustments and validation. Historical receipts below remain
+> historical evidence, not tests of the new public build.
+
 ## What this update publishes
 
 This is a consolidated **documentation update**, covering the production work since

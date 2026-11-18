@@ -11,6 +11,7 @@ import { PixelIcon } from './ui/PixelIcon.js';
 export interface AgentAppearance {
   palette: number;
   repeat: number;
+  jungleName?: string;
 }
 
 /** Agent activity reflected by the tab's status dot. */
@@ -68,6 +69,7 @@ export function AgentCard({
       title={`Agent ${agentId}`}
     >
       <CharacterMugShot
+        jungleName={appearance.jungleName}
         palette={appearance.palette}
         repeat={appearance.repeat}
         cropTop={CARD_MUGSHOT_CROP_TOP_ROW}

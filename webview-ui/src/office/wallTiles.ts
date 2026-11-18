@@ -125,6 +125,7 @@ export function getWallInstances(
         : getWallSprite(c, r, tileMap);
       if (!wallInfo) continue;
       instances.push({
+        sceneLayer: 'wall',
         sprite: wallInfo.sprite,
         x: c * TILE_SIZE,
         y: r * TILE_SIZE + wallInfo.offsetY,

@@ -1,10 +1,18 @@
 import type { ColorValue } from '../../components/ui/types.js';
+import { breakRoomRule } from '../breakRoomRuntime.js';
+import { clinicRule } from '../clinicRuntime.js';
 import { getColorizedSprite } from '../colorize.js';
+import { hallwayRule } from '../hallwayRuntime.js';
+import { jungleRenderLayer } from '../jungleRuntime.js';
+import { LIBRARY_WORK_SEAT, libraryRenderLayer, libraryWallCourses } from '../libraryRuntime.js';
+import { nsiRackLights, nsiSurfaceDepth } from '../nsiRuntime.js';
+import { serviceFurnitureRule } from '../serviceRuntime.js';
 import type {
   FurnitureInstance,
   OfficeLayout,
   PlacedFurniture,
   Seat,
+  SpriteData,
   TileType as TileTypeVal,
 } from '../types.js';
 import { DEFAULT_COLS, DEFAULT_ROWS, Direction, TILE_SIZE, TileType } from '../types.js';
@@ -23,14 +31,30 @@ export function layoutToTileMap(layout: OfficeLayout): TileTypeVal[][] {
   return map;
 }
 
+// Owner-requested wall fixtures never occlude agents, regardless of their catalog category.
+const ALWAYS_BACKGROUND_FURNITURE = new Set([
+  'new26-wall-clock',
+  'new26-curtained-window',
+  'new26-bookcase-south',
+  'BOOKSHELF',
+  'CLOCK',
+  'DOUBLE_BOOKSHELF',
+  'bookshelf-1',
+  'bookshelf-9',
+  'clock',
+]);
+
 /** Convert placed furniture into renderable FurnitureInstance[] */
-export function layoutToFurnitureInstances(furniture: PlacedFurniture[]): FurnitureInstance[] {
+export function layoutToFurnitureInstances(
+  furniture: PlacedFurniture[],
+  spriteOverrides?: ReadonlyMap<string, SpriteData>,
+): FurnitureInstance[] {
   // Pre-compute desk zY per tile so surface items can sort in front of desks
   const deskZByTile = new Map<string, number>();
   for (const item of furniture) {
     const entry = getCatalogEntry(item.type);
     if (!entry || !entry.isDesk) continue;
-    const deskZY = item.row * TILE_SIZE + entry.sprite.length;
+    const deskZY = item.row * TILE_SIZE + (entry.drawOffsetY ?? 0) + entry.sprite.length;
     for (let dr = 0; dr < entry.footprintH; dr++) {
       for (let dc = 0; dc < entry.footprintW; dc++) {
         const key = `${item.col + dc},${item.row + dr}`;
@@ -47,7 +71,7 @@ export function layoutToFurnitureInstances(furniture: PlacedFurniture[]): Furnit
     const x = item.col * TILE_SIZE;
     const y = item.row * TILE_SIZE;
     const spriteH = entry.sprite.length;
-    let zY = y + spriteH;
+    let zY = y + (entry.drawOffsetY ?? 0) + spriteH;
 
     // Chair z-sorting: ensure characters sitting on chairs render correctly
     if (entry.category === 'chairs') {
@@ -75,7 +99,7 @@ export function layoutToFurnitureInstances(furniture: PlacedFurniture[]): Furnit
     }
 
     // Colorize sprite if this furniture has a color override
-    let sprite = entry.sprite;
+    let sprite = spriteOverrides?.get(item.uid) ?? entry.sprite;
     if (item.color) {
       const { h, s, b: bv, c: cv } = item.color;
       sprite = getColorizedSprite(
@@ -94,13 +118,141 @@ export function layoutToFurnitureInstances(furniture: PlacedFurniture[]): Furnit
       }
     }
 
-    instances.push({ sprite, x, y, zY, ...(mirrored ? { mirrored: true } : {}) });
+    sprite = nsiRackLights(item.type, sprite);
+    const drawX = x + (entry.drawOffsetX ?? 0);
+    const drawY = y + (entry.drawOffsetY ?? 0);
+    const clinic = hallwayRule(item.type) ?? breakRoomRule(item.type) ?? clinicRule(item.type);
+    if (clinic) {
+      const base = { libraryRoom: true, x: drawX, y: drawY };
+      if (clinic.layer === 'floor' || clinic.layer === 'background')
+        instances.push({ ...base, sprite, sceneLayer: clinic.layer, zY: clinic.depth });
+      else if (clinic.split) {
+        const split =
+          'splitRow' in clinic && typeof clinic.splitRow === 'number'
+            ? clinic.splitRow
+            : Math.floor(sprite.length / 2);
+        instances.push({ ...base, sprite: sprite.slice(split), y: drawY + split, zY: -1 });
+        instances.push({ ...base, sprite: sprite.slice(0, split), zY: clinic.depth });
+      } else instances.push({ ...base, sprite, zY: clinic.depth });
+      continue;
+    }
+    const nsd = nsiSurfaceDepth(item.type);
+    if (nsd !== null) {
+      instances.push({ libraryRoom: true, x: drawX, y: drawY, sprite, zY: nsd });
+      continue;
+    }
+    const sr = serviceFurnitureRule(item.type);
+    if (sr) {
+      instances.push({
+        libraryRoom: true,
+        x: drawX,
+        y: drawY,
+        sprite,
+        ...(sr.background ? { sceneLayer: 'background' as const } : {}),
+        zY: sr.background ? -2 : 288 + sr.depth,
+      });
+      continue;
+    }
+    const libraryLayer = libraryRenderLayer(item.type) ?? jungleRenderLayer(item.type);
+    if (libraryLayer) {
+      sprite = libraryWallCourses(item.type, sprite, getCatalogEntry('lib26-north-wall-0')?.sprite);
+      const b = {
+        libraryRoom: true,
+        x: drawX,
+        y: drawY,
+        sprite,
+        ...(mirrored ? { mirrored: true } : {}),
+      };
+      instances.push({
+        ...b,
+        ...(libraryLayer === 'floor' || libraryLayer === 'background'
+          ? { sceneLayer: libraryLayer }
+          : {}),
+        zY:
+          libraryLayer === 'ledger'
+            ? drawY + 32 + 8.51
+            : libraryLayer === 'foreground'
+              ? 1000000
+              : libraryLayer === 'floor'
+                ? -3
+                : -2,
+      });
+      continue;
+    }
+    const fullyBackground =
+      entry.renderLayer === 'floor' ||
+      ALWAYS_BACKGROUND_FURNITURE.has(item.type) ||
+      (!entry.canPlaceOnSurfaces && (entry.backgroundTiles ?? 0) >= entry.footprintH);
+    const base = { x: drawX, y: drawY, ...(mirrored ? { mirrored: true } : {}) };
+    // Keep chair seating/occlusion and desk-surface decorations intact. Ground furniture's
+    // solid lower half is always behind agents; only its upper half participates in depth
+    // sorting. Use the actual art position (including offsets), not the placement anchor.
+    if (
+      !fullyBackground &&
+      entry.category !== 'chairs' &&
+      !entry.canPlaceOnWalls &&
+      !entry.canPlaceOnSurfaces &&
+      spriteH > 1
+    ) {
+      const split = Math.floor(spriteH / 2);
+      instances.push({ ...base, sprite: sprite.slice(split), y: drawY + split, zY: -1 });
+      instances.push({ ...base, sprite: sprite.slice(0, split), zY });
+    } else {
+      const sceneLayer =
+        entry.renderLayer === 'floor'
+          ? ('floor' as const)
+          : ALWAYS_BACKGROUND_FURNITURE.has(item.type)
+            ? ('background' as const)
+            : item.type === 'new26-cream-wall-trim'
+              ? ('wall-finish' as const)
+              : undefined;
+      instances.push({
+        ...base,
+        sprite,
+        ...(sceneLayer ? { sceneLayer } : {}),
+        zY:
+          entry.renderLayer === 'floor'
+            ? -3
+            : ALWAYS_BACKGROUND_FURNITURE.has(item.type)
+              ? -2
+              : fullyBackground
+                ? -1
+                : zY,
+      });
+    }
   }
   return instances;
 }
 
+/** Tiles covered by the bottom half of a furniture sprite (owner request 1570523531429810263,
+ *  2026-11-12: "make the bottom half of all furniture solid"). Pure math so it stays testable. */
+export function spriteBottomHalfTiles(
+  col: number,
+  row: number,
+  spriteW: number,
+  spriteH: number,
+  drawOffsetX: number,
+  drawOffsetY: number,
+): Array<{ col: number; row: number }> {
+  const out: Array<{ col: number; row: number }> = [];
+  if (spriteW <= 0 || spriteH <= 0) return out;
+  const x0 = col * TILE_SIZE + drawOffsetX;
+  const y0 = row * TILE_SIZE + drawOffsetY;
+  const c0 = Math.floor(x0 / TILE_SIZE);
+  const c1 = Math.floor((x0 + spriteW - 1) / TILE_SIZE);
+  const r0 = Math.floor((y0 + Math.floor(spriteH / 2)) / TILE_SIZE);
+  const r1 = Math.floor((y0 + spriteH - 1) / TILE_SIZE);
+  for (let r = r0; r <= r1; r++) {
+    for (let c = c0; c <= c1; c++) out.push({ col: c, row: r });
+  }
+  return out;
+}
+
 /** Get all tiles blocked by furniture footprints, optionally excluding a set of tiles.
- *  Skips top backgroundTiles rows so characters can walk through them. */
+ *  Skips top backgroundTiles rows so characters can walk through them.
+ *  Also blocks the tiles under the bottom half of each sprite (footprint-only rects left
+ *  tall art walkable through); fully background items (backgroundTiles >= footprintH,
+ *  e.g. rugs and wall art) never block. */
 export function getBlockedTiles(
   furniture: PlacedFurniture[],
   excludeTiles?: Set<string>,
@@ -114,6 +266,26 @@ export function getBlockedTiles(
       if (dr < bgRows) continue; // skip background rows — characters can walk through
       for (let dc = 0; dc < entry.footprintW; dc++) {
         const key = `${item.col + dc},${item.row + dr}`;
+        if (excludeTiles && excludeTiles.has(key)) continue;
+        tiles.add(key);
+      }
+    }
+    if (
+      bgRows < entry.footprintH &&
+      !item.type.startsWith('lib26-') &&
+      !item.type.startsWith('jun26-')
+    ) {
+      const spriteH = entry.sprite.length;
+      const spriteW = entry.sprite[0] ? entry.sprite[0].length : 0;
+      for (const t of spriteBottomHalfTiles(
+        item.col,
+        item.row,
+        spriteW,
+        spriteH,
+        entry.drawOffsetX || 0,
+        entry.drawOffsetY || 0,
+      )) {
+        const key = `${t.col},${t.row}`;
         if (excludeTiles && excludeTiles.has(key)) continue;
         tiles.add(key);
       }
@@ -223,7 +395,7 @@ export function layoutToSeats(furniture: PlacedFurniture[]): Map<string, Seat> {
           uid: seatUid,
           seatCol: tileCol,
           seatRow: tileRow,
-          facingDir,
+          facingDir: item.uid === LIBRARY_WORK_SEAT ? Direction.DOWN : facingDir,
           assigned: false,
         });
         seatCount++;

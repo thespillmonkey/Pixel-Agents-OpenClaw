@@ -44,6 +44,7 @@ import { collectDirectorySuggestions } from './directorySuggestions.js';
 import { hostDirectory } from './hostDirectory.js';
 import { readLayoutFromFile, writeLayoutToFile } from './layoutPersistence.js';
 import { getPaletteCount } from './paletteAssigner.js';
+import { primaryWorkSeat } from './primaryWorkSeat.js';
 import type { ConsentEffects } from './providers/hook/consentExecutor.js';
 import { applyConsentChoice } from './providers/hook/consentExecutor.js';
 import { hooksConsentRequest } from './providers/hook/consentGate.js';
@@ -409,6 +410,11 @@ export function handleClientMessage(
         }
         // Seat snapshots from another browser must never undo a name-bound appearance.
         for (const agent of store.values()) applyAgentAppearance(agent, cache?.characters, store);
+        // A stale/reconnecting browser cannot erase a named primary work seat.
+        for (const agent of store.values()) {
+          const seatId = primaryWorkSeat(agent);
+          if (seatId) seats[String(agent.id)] = { ...seats[String(agent.id)], seatId };
+        }
         adapter?.saveSeats(seats);
         // Kept per session, so a resumed conversation comes back as it was.
         recordConversationLooks(store, seats);
@@ -826,7 +832,7 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
     agentMeta[id] = {
       palette: agent.palette,
       repeat: agent.repeat,
-      seatId: persisted?.seatId,
+      seatId: primaryWorkSeat(agent) ?? persisted?.seatId,
     };
   }
   // Before the agents, so their cards appear in order rather than reshuffle.

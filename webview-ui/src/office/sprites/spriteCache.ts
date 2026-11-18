@@ -68,7 +68,12 @@ export function getCachedSprite(sprite: SpriteData, zoom: number): HTMLCanvasEle
       const color = sprite[r][c];
       if (color === '') continue;
       ctx.fillStyle = color;
-      ctx.fillRect(c * zoom, r * zoom, zoom, zoom);
+      // Share integer boundaries with adjacent cells. Canvas dimensions
+      // already truncate cols/rows * zoom; flooring every edge matches that
+      // footprint and avoids alpha coverage seams at quarter-step zoom.
+      const x = Math.floor(c * zoom);
+      const y = Math.floor(r * zoom);
+      ctx.fillRect(x, y, Math.floor((c + 1) * zoom) - x, Math.floor((r + 1) * zoom) - y);
     }
   }
 

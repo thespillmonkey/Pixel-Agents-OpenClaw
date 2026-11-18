@@ -13,8 +13,17 @@ import {
   PET_HIT_HEIGHT,
   WAITING_BUBBLE_DURATION_SEC,
 } from '../../constants.js';
-import { characterSittingOffset } from '../characterAlignment.js';
+import { characterSittingOffset, characterSittingOffsetX } from '../characterAlignment.js';
+import { clinicBounds, clinicSeated, clinicStationType } from '../clinicRuntime.js';
 import { contextUsedShare } from '../contextGauge.js';
+import {
+  isJungleSeat,
+  jungleBounds,
+  jungleIdentity,
+  jungleSeat,
+  jungleStationType,
+  setJungleClock,
+} from '../jungleRuntime.js';
 import { getAnimationFrames, getCatalogEntry, getOnStateType } from '../layout/furnitureCatalog.js';
 import {
   createDefaultLayout,
@@ -25,8 +34,18 @@ import {
 } from '../layout/layoutSerializer.js';
 import { findPath, getWalkableTiles, isWalkable } from '../layout/tileMap.js';
 import { pairWorkstations } from '../layout/workstations.js';
+import {
+  LIBRARY_WORK_SEAT,
+  libraryAnimationType,
+  MITSUKI_WORK_SEAT,
+  usesLedgerWorkspot,
+  usesMitsukiWorkspot,
+} from '../libraryRuntime.js';
+import { holdRebooto, nsiIdentity, nsiStationType } from '../nsiRuntime.js';
+import { serviceFurnitureType, serviceIdentity } from '../serviceRuntime.js';
 import { getPetCount, getPetName } from '../sprites/petSpriteData.js';
 import { getLoadedCharacterCount } from '../sprites/spriteData.js';
+import { isReadingToolName } from '../toolUtils.js';
 import type {
   Character,
   FurnitureInstance,
@@ -40,6 +59,7 @@ import type {
 import { CharacterState, Direction, PetState, TILE_SIZE } from '../types.js';
 import { tickBlink } from './blink.js';
 import { createCharacter, restInChair, updateCharacter, updateHelper } from './characters.js';
+import { IdlePlay, playEligible } from './idlePlay.js';
 import { advanceMatrixEffect, startMatrixEffect } from './matrixEffectState.js';
 import { createPet, updatePet } from './petEntity.js';
 import { anchorTile, closestFreeSeat } from './seatPlacement.js';
@@ -73,6 +93,8 @@ function ringsAround(home: Tile): (tile: Tile) => number {
 }
 
 export class OfficeState {
+  readonly idlePlay = new IdlePlay();
+  private litToys: ReadonlySet<string> = new Set();
   layout: OfficeLayout;
   tileMap: TileTypeVal[][];
   seats: Map<string, Seat>;
@@ -161,6 +183,7 @@ export class OfficeState {
     this.blockedTiles = getBlockedTiles(this.layout.furniture);
     this.furniture = layoutToFurnitureInstances(this.layout.furniture);
     this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles);
+    this.idlePlay.configure(this.layout, this.characters.values());
     // Pets are built last because they need walkableTiles populated for spawn.
     this.rebuildPetsFromLayout(this.layout);
   }
@@ -168,6 +191,7 @@ export class OfficeState {
   /** Rebuild all derived state from a new layout. Reassigns existing characters.
    *  @param shift Optional pixel shift to apply when grid expands left/up */
   rebuildFromLayout(layout: OfficeLayout, shift?: { col: number; row: number }): void {
+    this.idlePlay.configure(layout, this.characters.values());
     this.layout = layout;
     this.tileMap = layoutToTileMap(layout);
     this.seats = layoutToSeats(layout.furniture);
@@ -206,6 +230,20 @@ export class OfficeState {
       seat.assigned = false;
     }
 
+    // The ledger is an exclusive work binding, not a seat preference that snapshots may undo.
+    for (const ch of this.characters.values()) {
+      if (jungleSeat(ch) && this.seats.has(jungleSeat(ch)!)) ch.seatId = jungleSeat(ch);
+      else if (usesLedgerWorkspot(ch))
+        ch.seatId = this.seats.has(LIBRARY_WORK_SEAT) ? LIBRARY_WORK_SEAT : null;
+      else if (usesMitsukiWorkspot(ch) && this.seats.has(MITSUKI_WORK_SEAT))
+        ch.seatId = MITSUKI_WORK_SEAT;
+      else if (isJungleSeat(ch.seatId)) ch.seatId = null;
+      else if (
+        ch.seatId === LIBRARY_WORK_SEAT ||
+        (this.seats.has(LIBRARY_WORK_SEAT) && ch.seatId === MITSUKI_WORK_SEAT)
+      )
+        ch.seatId = null;
+    }
     // First pass: try to keep characters at their existing seats
     for (const ch of this.characters.values()) {
       if (ch.seatId && this.seats.has(ch.seatId)) {
@@ -366,9 +404,23 @@ export class OfficeState {
    * unzoned seats from a layout without `areaTiles`, which is every seat).
    */
   private findFreeSeat(directoryName?: string): string | null {
+    const jungle = jungleSeat({ directoryName });
+    if (jungle && this.seats.has(jungle)) return !this.seats.get(jungle)!.assigned ? jungle : null;
+    if (usesLedgerWorkspot({ directoryName }))
+      return this.seats.has(LIBRARY_WORK_SEAT) && !this.seats.get(LIBRARY_WORK_SEAT)!.assigned
+        ? LIBRARY_WORK_SEAT
+        : null;
+    if (usesMitsukiWorkspot({ directoryName }) && this.seats.has(MITSUKI_WORK_SEAT))
+      return !this.seats.get(MITSUKI_WORK_SEAT)!.assigned ? MITSUKI_WORK_SEAT : null;
     const freeSeats: string[] = [];
     for (const [uid, seat] of this.seats) {
-      if (!seat.assigned) freeSeats.push(uid);
+      if (
+        !seat.assigned &&
+        !isJungleSeat(uid) &&
+        uid !== LIBRARY_WORK_SEAT &&
+        !(this.seats.has(LIBRARY_WORK_SEAT) && uid === MITSUKI_WORK_SEAT)
+      )
+        freeSeats.push(uid);
     }
     if (freeSeats.length === 0) return null;
 
@@ -473,6 +525,21 @@ export class OfficeState {
       ({ palette, repeat } = chooseLook({ paletteCount: getLoadedCharacterCount(), worn }));
     }
 
+    const jungle = jungleSeat({ directoryName, parentAgentId: nearAgentId });
+    if (jungle && this.seats.has(jungle)) preferredSeatId = jungle;
+    else if (isJungleSeat(preferredSeatId)) preferredSeatId = undefined;
+    if (!jungle && usesLedgerWorkspot({ directoryName, parentAgentId: nearAgentId }))
+      preferredSeatId = LIBRARY_WORK_SEAT;
+    else if (
+      usesMitsukiWorkspot({ directoryName, parentAgentId: nearAgentId }) &&
+      this.seats.has(MITSUKI_WORK_SEAT)
+    )
+      preferredSeatId = MITSUKI_WORK_SEAT;
+    else if (
+      preferredSeatId === LIBRARY_WORK_SEAT ||
+      (this.seats.has(LIBRARY_WORK_SEAT) && preferredSeatId === MITSUKI_WORK_SEAT)
+    )
+      preferredSeatId = undefined;
     // Try preferred seat first, then (for teammates) the seat closest to the
     // anchor agent, then any free seat. anchorTile resolves to the anchor's SEAT
     // (stable from creation) rather than its live tile, so a teammate placed while
@@ -487,7 +554,18 @@ export class OfficeState {
       }
     }
     if (!seatId && anchorAt) {
-      seatId = closestFreeSeat(this.seats, anchorAt.col, anchorAt.row);
+      seatId = closestFreeSeat(
+        new Map(
+          [...this.seats].filter(
+            ([uid]) =>
+              !isJungleSeat(uid) &&
+              uid !== LIBRARY_WORK_SEAT &&
+              !(this.seats.has(LIBRARY_WORK_SEAT) && uid === MITSUKI_WORK_SEAT),
+          ),
+        ),
+        anchorAt.col,
+        anchorAt.row,
+      );
     }
     if (!seatId) {
       seatId = this.findFreeSeat(directoryName);
@@ -608,6 +686,8 @@ export class OfficeState {
     const ch = this.characters.get(id);
     if (!ch) return;
     if (ch.matrixEffect === 'despawn') return; // already despawning
+    this.idlePlay.cancel(ch);
+    this.rebuildFurnitureInstances();
     // Give the seat up at once: a departing character holds none, so nothing
     // (a layout rebuild included) can mark it taken again during the effect.
     if (ch.seatId) {
@@ -644,6 +724,17 @@ export class OfficeState {
       ch.palette = palette;
       ch.repeat = repeat ?? 0;
     }
+    const jungle = jungleSeat(ch);
+    if (jungle && this.seats.has(jungle)) seatId = jungle;
+    else if (isJungleSeat(seatId)) seatId = undefined;
+    if (!jungle && usesLedgerWorkspot(ch)) seatId = LIBRARY_WORK_SEAT;
+    else if (usesMitsukiWorkspot(ch) && this.seats.has(MITSUKI_WORK_SEAT))
+      seatId = MITSUKI_WORK_SEAT;
+    else if (
+      seatId === LIBRARY_WORK_SEAT ||
+      (this.seats.has(LIBRARY_WORK_SEAT) && seatId === MITSUKI_WORK_SEAT)
+    )
+      seatId = undefined;
     if (seatId !== undefined && seatId !== ch.seatId) {
       const seat = this.seats.get(seatId);
       if (seat && !seat.assigned) this.reassignSeat(agentId, seatId);
@@ -664,6 +755,18 @@ export class OfficeState {
   reassignSeat(agentId: number, seatId: string): void {
     const ch = this.characters.get(agentId);
     if (!ch) return;
+    const jungle = jungleSeat(ch);
+    if (jungle && this.seats.has(jungle)) seatId = jungle;
+    else if (isJungleSeat(seatId)) return;
+    if (!jungle && usesLedgerWorkspot(ch)) seatId = LIBRARY_WORK_SEAT;
+    else if (usesMitsukiWorkspot(ch) && this.seats.has(MITSUKI_WORK_SEAT))
+      seatId = MITSUKI_WORK_SEAT;
+    else if (
+      seatId === LIBRARY_WORK_SEAT ||
+      (this.seats.has(LIBRARY_WORK_SEAT) && seatId === MITSUKI_WORK_SEAT)
+    )
+      return;
+    if (!seatId) return;
     // Unassign old seat
     if (ch.seatId) {
       const old = this.seats.get(ch.seatId);
@@ -710,7 +813,18 @@ export class OfficeState {
     if (!teammate || !lead) return;
     const anchorAt = anchorTile(lead, this.seats);
     if (!anchorAt) return;
-    const target = closestFreeSeat(this.seats, anchorAt.col, anchorAt.row);
+    const target = closestFreeSeat(
+      new Map(
+        [...this.seats].filter(
+          ([uid]) =>
+            !isJungleSeat(uid) &&
+            uid !== LIBRARY_WORK_SEAT &&
+            !(this.seats.has(LIBRARY_WORK_SEAT) && uid === MITSUKI_WORK_SEAT),
+        ),
+      ),
+      anchorAt.col,
+      anchorAt.row,
+    );
     if (!target || target === teammate.seatId) return;
     const targetSeat = this.seats.get(target)!;
     const targetDist =
@@ -754,7 +868,7 @@ export class OfficeState {
   /** Walk an agent to an arbitrary walkable tile (right-click command) */
   walkToTile(agentId: number, col: number, row: number): boolean {
     const ch = this.characters.get(agentId);
-    if (!ch || ch.isSubagent) return false;
+    if (!ch || ch.isSubagent || nsiIdentity(ch) === 'rebooto') return false;
     if (!isWalkable(col, row, this.tileMap, this.blockedTiles)) {
       // Also allow walking to own seat tile (blocked for others but not self)
       const key = this.ownSeatKey(ch);
@@ -911,6 +1025,8 @@ export class OfficeState {
     if (ch) {
       const turnEnded = !active && ch.isActive;
       ch.isActive = active;
+      if (active)
+        this.withOwnSeatUnblocked(ch, () => this.idlePlay.returnToWork(ch, this.toyContext()));
       // Only a turn that just ended stands the agent up: one already at rest
       // (restored, or told again on a reconnect) keeps resting.
       if (turnEnded) {
@@ -948,6 +1064,10 @@ export class OfficeState {
       }
       const seat = this.seats.get(ch.seatId);
       if (!seat || ch.tileCol !== seat.seatCol || ch.tileRow !== seat.seatRow) continue;
+      if (ch.seatId === LIBRARY_WORK_SEAT) lit.add('lib26-ledger');
+      if (isJungleSeat(ch.seatId)) lit.add(ch.seatId);
+      if (serviceIdentity(ch) === 'patches' && isReadingToolName(ch.currentTool ?? ''))
+        lit.add('trio26-patches-reading');
       const pc = this.seatWorkstations.get(ch.seatId);
       if (pc) lit.add(pc);
     }
@@ -957,14 +1077,23 @@ export class OfficeState {
   /** Rebuild furniture instances with auto-state applied (a working agent's PC turns ON) */
   private rebuildFurnitureInstances(lit = this.litWorkstations()): void {
     this.litPcs = lit;
-    if (lit.size === 0) {
-      this.furniture = layoutToFurnitureInstances(this.layout.furniture);
-      return;
-    }
 
     // Build modified furniture list with auto-state and animation applied
     const animFrame = Math.floor(this.furnitureAnimTimer / FURNITURE_ANIM_INTERVAL_SEC);
+    const clinicOccupied = Array.from(this.characters.values()).some(clinicSeated);
     const modifiedFurniture: PlacedFurniture[] = this.layout.furniture.map((item) => {
+      if (item.type.startsWith('clinic27-'))
+        return { ...item, type: clinicStationType(item.type, lit, clinicOccupied) };
+      if (item.type.startsWith('nsi26-')) return { ...item, type: nsiStationType(item.type, lit) };
+      if (item.type.startsWith('trio26-'))
+        return { ...item, type: serviceFurnitureType(item.type, this.furnitureAnimTimer, lit) };
+      if (item.type.startsWith('jun26-'))
+        return { ...item, type: jungleStationType(item.type, this.furnitureAnimTimer, lit) };
+      if (item.type.startsWith('lib26-'))
+        return {
+          ...item,
+          type: libraryAnimationType(item.type, this.furnitureAnimTimer, lit.has('lib26-ledger')),
+        };
       if (!lit.has(item.uid)) return item;
       let onType = getOnStateType(item.type);
       if (onType === item.type) return item;
@@ -974,7 +1103,11 @@ export class OfficeState {
       return { ...item, type: onType };
     });
 
-    this.furniture = layoutToFurnitureInstances(modifiedFurniture);
+    this.litToys = this.idlePlay.playingIds();
+    this.furniture = layoutToFurnitureInstances(
+      modifiedFurniture,
+      this.idlePlay.spriteOverrides(this.furnitureAnimTimer),
+    );
   }
 
   setAgentTool(id: number, tool: string | null): void {
@@ -1193,11 +1326,36 @@ export class OfficeState {
     ch.contextReported = true;
   }
 
+  /** Completion/waiting indicators expire; permission requests remain explicit. */
+  private tickWaitingBubble(ch: Character, dt: number): void {
+    if (ch.bubbleType !== 'waiting') return;
+    ch.bubbleTimer = Math.max(0, ch.bubbleTimer - dt);
+    if (ch.bubbleTimer === 0) ch.bubbleType = null;
+  }
+
+  private toyContext() {
+    return {
+      tileMap: this.tileMap,
+      blocked: this.blockedTiles,
+      seats: this.seats,
+      occupied: (t: Tile, id: number, ignore?: ReadonlySet<number>) =>
+        [...this.characters.values()].some(
+          (other) =>
+            other.id !== id &&
+            !ignore?.has(other.id) &&
+            other.matrixEffect !== 'despawn' &&
+            ((other.tileCol === t.col && other.tileRow === t.row) ||
+              other.path.some((p) => p.col === t.col && p.row === t.row)),
+        ),
+    };
+  }
+
   update(dt: number): void {
     // Furniture animation cycling
-    const prevFrame = Math.floor(this.furnitureAnimTimer / FURNITURE_ANIM_INTERVAL_SEC);
+    const prevFrame = Math.floor(this.furnitureAnimTimer / 0.05);
     this.furnitureAnimTimer += dt;
-    const newFrame = Math.floor(this.furnitureAnimTimer / FURNITURE_ANIM_INTERVAL_SEC);
+    setJungleClock(this.furnitureAnimTimer);
+    const newFrame = Math.floor(this.furnitureAnimTimer / 0.05);
     if (newFrame !== prevFrame) {
       this.rebuildFurnitureInstances();
     }
@@ -1211,6 +1369,14 @@ export class OfficeState {
 
     const toDelete: number[] = [];
     for (const ch of this.characters.values()) {
+      if (!playEligible(ch) && !ch.isActive) this.idlePlay.cancel(ch);
+      if (holdRebooto(ch, this.seats)) {
+        const effect = advanceMatrixEffect(ch, dt);
+        if (effect === 'despawned') toDelete.push(ch.id);
+        // Fixed-screen agents skip locomotion, not transient status cleanup.
+        if (effect === 'none') this.tickWaitingBubble(ch, dt);
+        continue;
+      }
       tickBlink(ch, dt, ch.state === CharacterState.TYPE);
       const effect = advanceMatrixEffect(ch, dt);
       if (effect !== 'none') {
@@ -1218,6 +1384,23 @@ export class OfficeState {
         continue; // skip normal FSM while the effect is (or just was) active
       }
 
+      const jungle = jungleSeat(ch);
+      if (ch.isActive && jungle && ch.seatId !== jungle && this.seats.has(jungle))
+        this.reassignSeat(ch.id, jungle);
+      if (
+        ch.isActive &&
+        usesLedgerWorkspot(ch) &&
+        ch.seatId !== LIBRARY_WORK_SEAT &&
+        this.seats.has(LIBRARY_WORK_SEAT)
+      )
+        this.reassignSeat(ch.id, LIBRARY_WORK_SEAT);
+      if (
+        ch.isActive &&
+        usesMitsukiWorkspot(ch) &&
+        ch.seatId !== MITSUKI_WORK_SEAT &&
+        this.seats.has(MITSUKI_WORK_SEAT)
+      )
+        this.reassignSeat(ch.id, MITSUKI_WORK_SEAT);
       if (ch.isSubagent) {
         const lead = ch.parentAgentId !== null ? this.characters.get(ch.parentAgentId) : undefined;
         // Helpers gather around the lead's seat, not the lead: an idle lead
@@ -1234,28 +1417,63 @@ export class OfficeState {
         );
       } else {
         // Temporarily unblock own seat so character can pathfind to it
-        this.withOwnSeatUnblocked(ch, () =>
-          updateCharacter(ch, dt, this.walkableTiles, this.seats, this.tileMap, this.blockedTiles),
-        );
+        this.withOwnSeatUnblocked(ch, () => {
+          const blocked = this.idlePlay.navigationBlocked(this.blockedTiles, ch.id);
+          if (!this.idlePlay.update(ch, dt, this.toyContext()))
+            updateCharacter(
+              ch,
+              dt,
+              this.walkableTiles.filter((t) => !blocked.has(`${t.col},${t.row}`)),
+              this.seats,
+              this.tileMap,
+              blocked,
+            );
+        });
       }
 
-      // Tick bubble timer for waiting bubbles
-      if (ch.bubbleType === 'waiting') {
-        ch.bubbleTimer -= dt;
-        if (ch.bubbleTimer <= 0) {
-          ch.bubbleType = null;
-          ch.bubbleTimer = 0;
+      // Never cast at a fallback chair or in place when the exclusive workstation is unreachable/missing.
+      if (ch.isActive && usesLedgerWorkspot(ch) && ch.state === CharacterState.TYPE) {
+        const work = this.seats.get(LIBRARY_WORK_SEAT);
+        if (
+          !work ||
+          ch.seatId !== LIBRARY_WORK_SEAT ||
+          ch.tileCol !== work.seatCol ||
+          ch.tileRow !== work.seatRow
+        ) {
+          ch.state = CharacterState.IDLE;
+          ch.frame = 0;
         }
       }
+      if (
+        ch.isActive &&
+        (nsiIdentity(ch) || jungleIdentity(ch) || serviceIdentity(ch)) &&
+        ch.state === CharacterState.TYPE
+      ) {
+        const work = jungle ? this.seats.get(jungle) : undefined;
+        if (
+          !work ||
+          ch.seatId !== jungle ||
+          ch.tileCol !== work.seatCol ||
+          ch.tileRow !== work.seatRow
+        ) {
+          ch.state = CharacterState.IDLE;
+          ch.frame = 0;
+        }
+      }
+      this.tickWaitingBubble(ch, dt);
     }
     // Remove characters that finished despawn
+    const playActor = [...this.characters.values()].find((ch) => playEligible(ch));
+    if (playActor) this.idlePlay.considerMultiplayer(this.toyContext());
     for (const id of toDelete) {
+      this.idlePlay.forget(id);
       this.characters.delete(id);
     }
 
     // A PC turns on when its agent sits down to work, not when the turn starts.
     const lit = this.litWorkstations();
-    if (!sameSet(lit, this.litPcs)) this.rebuildFurnitureInstances(lit);
+    if (!sameSet(lit, this.litPcs) || !sameSet(this.idlePlay.playingIds(), this.litToys))
+      this.rebuildFurnitureInstances(lit);
 
     // ── Pet FSM ────────────────────────────────────────────────
     for (const pet of this.pets) {
@@ -1305,12 +1523,18 @@ export class OfficeState {
     for (const ch of chars) {
       // Skip characters that are despawning
       if (ch.matrixEffect === 'despawn') continue;
+      const jb = clinicBounds(ch) ?? jungleBounds(ch);
+      if (jb) {
+        if (worldX >= jb.left && worldX < jb.right && worldY >= jb.top && worldY < jb.bottom)
+          return ch.id;
+        continue;
+      }
       // Character sprite is 16x24, anchored bottom-center
       // Apply sitting offset to match visual position
       const sittingOffset = characterSittingOffset(ch);
       const anchorY = ch.y + sittingOffset;
-      const left = ch.x - CHARACTER_HIT_HALF_WIDTH;
-      const right = ch.x + CHARACTER_HIT_HALF_WIDTH;
+      const left = ch.x + characterSittingOffsetX(ch) - CHARACTER_HIT_HALF_WIDTH;
+      const right = ch.x + characterSittingOffsetX(ch) + CHARACTER_HIT_HALF_WIDTH;
       const top = anchorY - CHARACTER_HIT_HEIGHT;
       const bottom = anchorY;
       if (worldX >= left && worldX <= right && worldY >= top && worldY <= bottom) {

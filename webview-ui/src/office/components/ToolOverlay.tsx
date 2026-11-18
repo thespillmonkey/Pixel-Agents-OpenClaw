@@ -19,10 +19,11 @@ import {
 } from '../../constants.js';
 import type { SubagentCharacter } from '../../hooks/useExtensionMessages.js';
 import { getActivityText } from '../activityText.js';
-import { characterSittingOffset } from '../characterAlignment.js';
+import { characterSittingOffset, characterSittingOffsetX } from '../characterAlignment.js';
 import { ContextBar } from '../ContextBar.js';
 import { contextLeft } from '../contextGauge.js';
 import type { OfficeState } from '../engine/officeState.js';
+import { jungleBounds } from '../jungleRuntime.js';
 import { shouldShowAgentLabel } from '../labelVisibility.js';
 import { overlayProjection } from '../projection.js';
 import { getCachedSprite } from '../sprites/spriteCache.js';
@@ -157,7 +158,11 @@ export function ToolOverlay({
             <div
               className="absolute -translate-x-1/2 pointer-events-none"
               style={{
-                left: project.toScreenX(ch.x),
+                left: project.toScreenX(
+                  jungleBounds(ch)
+                    ? (jungleBounds(ch)!.left + jungleBounds(ch)!.right) / 2
+                    : ch.x + characterSittingOffsetX(ch),
+                ),
                 // Bubble bottom sits one sprite pixel above the character's
                 // anchor: project the anchor, then lift by the bubble's own
                 // device-pixel height plus one zoomed pixel, in CSS px.
@@ -196,8 +201,13 @@ export function ToolOverlay({
         // Position above character: the sprite's top edge (the tallest hair
         // reaches it), or the bubble's when one shows over the head.
         const sittingOffset = characterSittingOffset(ch);
-        const screenX = project.toScreenX(ch.x);
-        const screenY = project.toScreenY(ch.y + sittingOffset - TOOL_OVERLAY_VERTICAL_OFFSET);
+        const jb = jungleBounds(ch);
+        const screenX = project.toScreenX(
+          jb ? (jb.left + jb.right) / 2 : ch.x + characterSittingOffsetX(ch),
+        );
+        const screenY = project.toScreenY(
+          jb ? jb.top : ch.y + sittingOffset - TOOL_OVERLAY_VERTICAL_OFFSET,
+        );
         const labelBottom = Math.min(screenY, bubbleTop ?? screenY) - TOOL_OVERLAY_GAP_PX;
 
         // A "Done" agent (finished turn: waiting bubble without awaitingInput)
@@ -230,7 +240,9 @@ export function ToolOverlay({
         const hasWaitingBubble = ch.bubbleType === 'waiting';
         const subHasPermission = isSub && ch.bubbleType === 'permission';
         let activityText: string;
-        if (!ch.isActive && hasWaitingBubble && ch.waitingAwaitingInput) {
+        if (ch.activityUnknown) {
+          activityText = 'Activity unknown';
+        } else if (!ch.isActive && hasWaitingBubble && ch.waitingAwaitingInput) {
           // Idle, waiting on the user -> dedicated label. A finished turn (Stop)
           // shows only the checkmark and falls through to the normal idle text.
           activityText = WAITING_INPUT_ACTIVITY_TEXT;

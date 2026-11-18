@@ -8,6 +8,9 @@
 // ── Manifest types ──────────────────────────────────────────
 
 export interface ManifestAsset {
+  drawOffsetX?: number;
+  drawOffsetY?: number;
+  renderLayer?: 'floor';
   type: 'asset';
   id: string;
   file: string;
@@ -33,6 +36,10 @@ export interface ManifestGroup {
 export type ManifestNode = ManifestAsset | ManifestGroup;
 
 export interface FurnitureManifest {
+  orientation?: string;
+  drawOffsetX?: number;
+  drawOffsetY?: number;
+  renderLayer?: 'floor';
   id: string;
   name: string;
   category: string;
@@ -66,6 +73,9 @@ export interface InheritedProps {
 }
 
 export interface FurnitureAsset {
+  drawOffsetX?: number;
+  drawOffsetY?: number;
+  renderLayer?: 'floor';
   id: string;
   name: string;
   label: string;
@@ -101,6 +111,7 @@ export function flattenManifest(node: ManifestNode, inherited: InheritedProps): 
     return [
       {
         id: asset.id,
+        ...furnitureVisualProps(asset),
         name: inherited.name,
         label: inherited.name,
         category: inherited.category,
@@ -170,4 +181,21 @@ export function flattenManifest(node: ManifestNode, inherited: InheritedProps): 
   }
 
   return results;
+}
+
+/** Validated render-only metadata; never changes footprints, seats or depth anchors. */
+export function furnitureVisualProps(asset: {
+  drawOffsetX?: number;
+  drawOffsetY?: number;
+  renderLayer?: 'floor';
+}) {
+  return {
+    ...(Number.isInteger(asset.drawOffsetX) && Math.abs(asset.drawOffsetX!) <= 256
+      ? { drawOffsetX: asset.drawOffsetX }
+      : {}),
+    ...(Number.isInteger(asset.drawOffsetY) && Math.abs(asset.drawOffsetY!) <= 256
+      ? { drawOffsetY: asset.drawOffsetY }
+      : {}),
+    ...(asset.renderLayer === 'floor' ? { renderLayer: asset.renderLayer } : {}),
+  };
 }

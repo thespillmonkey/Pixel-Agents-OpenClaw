@@ -149,58 +149,68 @@ export function SettingsModal({
             }}
           />
         )}
-        {/* Browser has no native directory picker, so accept a typed absolute path. */}
-        {isBrowserRuntime ? (
-          <div className="flex items-center gap-4 py-4 px-10">
-            <input
-              type="text"
-              value={assetDirDraft}
-              placeholder="Absolute asset directory path"
-              onChange={(e) => setAssetDirDraft(e.target.value)}
-              className="flex-1 min-w-0 text-xs py-2 px-4 bg-bg border-2 border-border rounded-none text-text"
-            />
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => {
-                const path = assetDirDraft.trim();
-                if (!path) return;
-                transport.send({ type: 'addExternalAssetDirectory', path });
-                setAssetDirDraft('');
-              }}
-              className="shrink-0"
-            >
-              Add
-            </Button>
+        <details className="border-y border-border my-2" aria-label="Asset Packs">
+          <summary className="cursor-pointer select-none py-4 px-10 text-sm text-text hover:bg-bg-light focus-visible:outline-2 focus-visible:outline-border">
+            Asset Packs{' '}
+            <span className="text-xs text-text-muted">({externalAssetDirectories.length})</span>
+          </summary>
+          <div className="pb-4">
+            {/* Browser has no native directory picker, so accept a typed absolute path. */}
+            {isBrowserRuntime ? (
+              <div className="flex items-center gap-4 py-4 px-10">
+                <input
+                  type="text"
+                  value={assetDirDraft}
+                  placeholder="Absolute asset directory path"
+                  onChange={(e) => setAssetDirDraft(e.target.value)}
+                  className="flex-1 min-w-0 text-xs py-2 px-4 bg-bg border-2 border-border rounded-none text-text"
+                />
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    const path = assetDirDraft.trim();
+                    if (!path) return;
+                    transport.send({ type: 'addExternalAssetDirectory', path });
+                    setAssetDirDraft('');
+                  }}
+                  className="shrink-0"
+                >
+                  Add
+                </Button>
+              </div>
+            ) : (
+              <MenuItem
+                onClick={() => {
+                  transport.send({ type: 'addExternalAssetDirectory' });
+                  onClose();
+                }}
+              >
+                Add Asset Directory
+              </MenuItem>
+            )}
+            {externalAssetDirectories.map((dir) => (
+              <div key={dir} className="flex items-center justify-between py-4 px-10 gap-8">
+                <span
+                  className="text-xs text-text-muted overflow-hidden text-ellipsis whitespace-nowrap"
+                  title={dir}
+                >
+                  {dir.split(/[/\\]/).pop() ?? dir}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    transport.send({ type: 'removeExternalAssetDirectory', path: dir })
+                  }
+                  className="shrink-0"
+                >
+                  x
+                </Button>
+              </div>
+            ))}
           </div>
-        ) : (
-          <MenuItem
-            onClick={() => {
-              transport.send({ type: 'addExternalAssetDirectory' });
-              onClose();
-            }}
-          >
-            Add Asset Directory
-          </MenuItem>
-        )}
-        {externalAssetDirectories.map((dir) => (
-          <div key={dir} className="flex items-center justify-between py-4 px-10 gap-8">
-            <span
-              className="text-xs text-text-muted overflow-hidden text-ellipsis whitespace-nowrap"
-              title={dir}
-            >
-              {dir.split(/[/\\]/).pop() ?? dir}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => transport.send({ type: 'removeExternalAssetDirectory', path: dir })}
-              className="shrink-0"
-            >
-              x
-            </Button>
-          </div>
-        ))}
+        </details>
         <Checkbox
           label="Sound Notifications"
           checked={soundLocal}
@@ -249,12 +259,22 @@ export function SettingsModal({
           checked={alwaysShowOverlay}
           onChange={onToggleAlwaysShowOverlay}
         />
-        <label className={`flex items-center justify-between w-full py-6 px-10 ${alwaysShowOverlay ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-btn-bg'}`}>
+        <label
+          className={`flex items-center justify-between w-full py-6 px-10 ${alwaysShowOverlay ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-btn-bg'}`}
+        >
           <span>Labels Only On Work</span>
-          <input type="checkbox" checked={labelsOnlyOnWork} disabled={alwaysShowOverlay}
-            onChange={onToggleLabelsOnlyOnWork} />
+          <input
+            type="checkbox"
+            checked={labelsOnlyOnWork}
+            disabled={alwaysShowOverlay}
+            onChange={onToggleLabelsOnlyOnWork}
+          />
         </label>
-        <Checkbox label="Cleaner Agent Labels" checked={cleanerAgentLabels} onChange={onToggleCleanerAgentLabels} />
+        <Checkbox
+          label="Cleaner Agent Labels"
+          checked={cleanerAgentLabels}
+          onChange={onToggleCleanerAgentLabels}
+        />
         {/* Headless agents are the office's only terminal-less citizens in VS Code.
           Standalone has no terminals at all, so nothing there would ever ghost. */}
         {!isBrowserRuntime && (
