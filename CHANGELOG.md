@@ -1,3 +1,16 @@
+# Fork documentation update — November 18, 2026
+
+- Consolidate post-integration production differential notes: authored rooms,
+  stable work seats, furniture collision/depth rules, supported props, pixel
+  alignment, status cleanup, custom character actions and ambient effects.
+- Document 30-second seated rests, randomized idle toy selection, immediate work
+  interruption, paired play and standing/toy animation contracts.
+- Add an inspected source integration map, compatibility/privacy boundaries and
+  exact retained validation results, including the three broader test failures.
+- **Documentation only:** runtime source, private art, production state and prior
+  release archives are unchanged. These notes do not ship the described features
+  in a new public build. See [the full scope](docs/PRODUCTION-DELTA-2026-11-18.md).
+
 # OpenClaw fork release — November 11, 2026
 
 Upstream v1.6 integration and both 48-phase extended animation formats are released in this fork. See [release notes](docs/RELEASE-2026-11-11.md) for features, validation, download checksums and limitations. The historical candidate notes below are retained for provenance.

@@ -24,6 +24,8 @@ Pixel Agents turns the AI coding agents running in your terminals into animated 
 
 > **OpenClaw integration branch:** this fork adds an experimental, metadata-only OpenClaw provider and a Gateway relay plugin, including remote offices, friendly names, and multi-session activity aggregation. This is not an upstream release announcement: the Marketplace/npm links below refer to the original project and do not necessarily contain these changes. [Build this fork and read the complete OpenClaw guide](docs/openclaw.md). Original Pixel Agents attribution, MIT license, and Claude Code workflows are retained.
 
+> **Production differential notes (November 18, 2026):** [Rooms, rendering, character actions and verification](docs/PRODUCTION-DELTA-2026-11-18.md), [idle/multiplayer play design](docs/IDLE-PLAY-DESIGN.md), and [source integration map](docs/PRODUCTION-SOURCE-MAP.md). This is documentation of the later production deployment, not a new public runtime or asset release.
+
 It ships in two forms from the same codebase:
 
 - **Standalone CLI** — `npx pixel-agents` starts a local server and serves the same office as a browser app, useful for tmux, remote, and non-VS Code workflows.
