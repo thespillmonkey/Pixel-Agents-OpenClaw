@@ -174,13 +174,16 @@ it('releases reservations when a layout rebuild removes a toy or an agent disapp
   p.forget(ch.id);
   expect(p.sessions.size).toBe(0);
 });
-it('provides 64-slot long loops with unchanged source art', () => {
+it('provides 600-slot table loops and unchanged single-player/source art', () => {
   for (const toy of layoutToys(layout)) {
     const frozen = JSON.stringify(toy.sprite),
-      phases = Array.from({ length: 64 }, (_, n) => toyAnimation(toy.type, toy.sprite, n * 0.1));
+      table = toy.multiplayer,
+      phases = Array.from({ length: table ? 600 : 64 }, (_, n) =>
+        toyAnimation(toy.type, toy.sprite, n * (table ? 0.04 : 0.1)),
+      );
     expect(new Set(phases.map((p) => JSON.stringify(p))).size).toBeGreaterThan(5);
     expect(JSON.stringify(toy.sprite)).toBe(frozen);
-    expect(toyAnimation(toy.type, toy.sprite, 6.4)).toEqual(phases[0]);
+    expect(toyAnimation(toy.type, toy.sprite, table ? 24 : 6.4)).toEqual(phases[0]);
   }
   const src = Array.from({ length: 32 }, () => Array(16).fill('#ffffff'));
   expect(toyPose(src, 1)).toEqual(src);
@@ -243,10 +246,10 @@ it('randomizes across every free single-player toy, without distance ranking', (
   }
   expect(seen.size).toBe(7);
 });
-it('places darts exactly 25 native pixels south of the board bottom and centers the pinballs', () => {
+it('places darts exactly 45 native pixels south of the board bottom and centers the pinballs', () => {
   const toys = layoutToys(layout),
     dart = toys.find((t) => t.type === 'break28-dartboard')!;
-  expect(dart.feet).toEqual({ x: 778, y: 367 });
+  expect(dart.feet).toEqual({ x: 778, y: 387 });
   const claw = toys.find((t) => t.type === 'break28-claw')!;
   expect(claw.facing).toBe(Direction.RIGHT);
   expect(claw.feet).toEqual({ x: 848, y: 475 });

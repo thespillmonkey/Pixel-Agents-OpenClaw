@@ -7,7 +7,7 @@
 > scope, portability adjustments and validation. Historical receipts below remain
 > historical evidence, not tests of the new public build.
 
-Status: production design as of November 18, 2026. This document describes the
+Status: production design as of November 19, 2026. This document describes the
 later deployed implementation; it does not add that implementation to this public
 source snapshot. See [publication scope and validation](PRODUCTION-DELTA-2026-11-18.md).
 
@@ -85,11 +85,13 @@ standard PixelIndex import schema.
 
 ## Toy visuals and interaction anchors
 
-Nine native overlays run **64 slots × 100 ms**, a 6.4-second loop, only during use:
+Single-player animated overlays use **64 slots × 100 ms**, a 6.4-second loop.
+Air hockey and foosball use **600 slots × 40 ms**, a 24-second loop at 25 fps.
+Playback begins only during use (both players must arrive for paired tables):
 
 - Pinballs: changing playfields, preserving cabinet bodies and support pixels.
 - Arcade: animated display, fixed cabinet.
-- Dartboard: thrown projectile; agent faces the board with visual feet 25 native
+- Dartboard: thrown projectile; agent faces the board with visual feet 45 native
   pixels south of its bottom edge.
 - Claw: animated mechanism within the glass, side-control interaction facing right.
 - Sink: water-only animation on the existing counter.
@@ -111,3 +113,16 @@ paired cleanup, workstation return and reservation release. Test actual transpor
 handlers as well as engine calls. Compare isolated furniture pixels over time so
 character motion cannot supply a false animation pass. Keep synthetic events
 browser-local and block unintended persistence during read-only production checks.
+
+## TV viewing
+
+The `break28-tv` toy resolves eligible `break28-seat-south` viewer positions inside
+its nearest `break28-sofa`. It is offered once during random toy selection; a free
+couch seat is selected and reserved without replacing the agent's saved workstation.
+Viewers use a static south-facing seated pose, not standing-play arm motion. The
+TV rear-panel sprite remains unchanged. A soft oblique light quadrilateral fades
+from at most 13% opacity to transparent over 48 native pixels; blue, red and green
+hues change at randomized 3–6 second intervals. Work activation immediately clears
+the viewer pose, reservation and light, then routes the agent to its own workstation.
+Current sink, coffee and dart anchors are authored visual offsets separate from
+navigation; see runtime source rather than older historical screenshots.

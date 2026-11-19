@@ -1,4 +1,5 @@
 import type { SpriteData } from '../types.js';
+import { opaqueRaster } from './opaqueRaster.js';
 
 const zoomCaches = new Map<number, WeakMap<SpriteData, HTMLCanvasElement>>();
 
@@ -62,6 +63,15 @@ export function getCachedSprite(sprite: SpriteData, zoom: number): HTMLCanvasEle
   canvas.height = rows * zoom;
   const ctx = canvas.getContext('2d')!;
   ctx.imageSmoothingEnabled = false;
+
+  const raster = opaqueRaster(sprite, zoom);
+  if (raster) {
+    const pixels = ctx.createImageData(canvas.width, canvas.height);
+    pixels.data.set(raster);
+    ctx.putImageData(pixels, 0, 0);
+    cache.set(sprite, canvas);
+    return canvas;
+  }
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {

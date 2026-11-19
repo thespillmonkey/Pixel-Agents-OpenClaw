@@ -425,6 +425,8 @@ function settle(ch: Character, facing: Direction | null): void {
 
 /** Get the correct sprite frame for a character's current state and direction */
 export function getCharacterSprite(ch: Character, sprites: CharacterSprites): SpriteData {
+  if (ch.state === CharacterState.PLAY && ch.playTv)
+    return getCharacterSprites(ch.palette, ch.repeat).seated[ch.dir];
   if (ch.state === CharacterState.PLAY)
     return (
       standingPlay(ch) ??

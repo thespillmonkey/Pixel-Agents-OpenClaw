@@ -15,6 +15,7 @@ import {
 import { stepAlongPath } from './characters.js';
 export { toyAnimation } from './toyAnimations.js';
 import { toyAnimation } from './toyAnimations.js';
+import { TV_TINTS } from './tvLight.js';
 
 export const IDLE_PLAY_INTERVAL = 60,
   IDLE_PLAY_CHANCE = 0.3;
@@ -29,6 +30,7 @@ export const TOY_TYPES = new Set([
   'break28-coffee-maker',
   'break28-hockey',
   'break28-foosball',
+  'break28-tv',
 ]);
 type Tile = { col: number; row: number };
 type Point = { x: number; y: number };
@@ -41,6 +43,13 @@ export type Toy = {
   sprite: SpriteData;
   slot: number;
   multiplayer: boolean;
+  tv?: {
+    seats: { uid: string; col: number; row: number }[];
+    x: number;
+    y: number;
+    width: number;
+    depth: number;
+  };
 };
 type Session = {
   toy: Toy;
@@ -65,6 +74,48 @@ export function layoutToys(layout: OfficeLayout): Toy[] {
       y = item.row * TILE_SIZE + (e.drawOffsetY ?? 0),
       w = e.sprite[0].length,
       h = e.sprite.length;
+    if (item.type === 'break28-tv') {
+      // The approved TV faces north: its visible art is the BACK, not a blank screen.
+      // Resolve the couch/real seats from placement; never seat a viewer at the TV itself.
+      const couches = layout.furniture
+        .filter((f) => f.type === 'break28-sofa')
+        .sort(
+          (a, b) =>
+            (a.col - item.col) ** 2 +
+            (a.row - item.row) ** 2 -
+            ((b.col - item.col) ** 2 + (b.row - item.row) ** 2),
+        );
+      const couch = couches[0],
+        ce = couch && getCatalogEntry(couch.type);
+      if (!couch || !ce) return [];
+      const cx = couch.col * 16 + (ce.drawOffsetX ?? 0),
+        cy = couch.row * 16 + (ce.drawOffsetY ?? 0);
+      const seats = layout.furniture
+        .filter(
+          (f) =>
+            f.type === 'break28-seat-south' &&
+            f.col * 16 + 8 >= cx &&
+            f.col * 16 + 8 < cx + ce.sprite[0].length &&
+            f.row * 16 + 8 >= cy &&
+            f.row * 16 + 8 < cy + ce.sprite.length,
+        )
+        .map((f) => ({ uid: f.uid, col: f.col, row: f.row }));
+      if (!seats.length) return [];
+      const seat = seats[0];
+      return [
+        {
+          uid: item.uid,
+          type: item.type,
+          feet: { x: seat.col * 16 + 8, y: seat.row * 16 + 19 },
+          anchor: { col: seat.col, row: seat.row },
+          facing: Direction.DOWN,
+          sprite: e.sprite,
+          slot: 0,
+          multiplayer: false,
+          tv: { seats, x: x + 2, y: y + 2, width: w - 4, depth: cy + ce.sprite.length + 1 },
+        },
+      ];
+    }
     const multi = item.type === 'break28-hockey' || item.type === 'break28-foosball';
     let specs: { feet: Point; facing: Direction }[];
     if (multi) {
@@ -76,13 +127,14 @@ export function layoutToys(layout: OfficeLayout): Toy[] {
     } else {
       let fx = x + w / 2,
         fy = y + h + 10;
-      if (item.type === 'break28-dartboard') fy = y + h + 25;
+      // Calibrated visible head just south of the rendered dart launch; preserve projectile art.
+      if (item.type === 'break28-dartboard') fy = y + h + 45;
       if (item.type === 'break28-counter') {
-        fx = x + 20;
-        fy = y + h + 10;
+        fx = x + 10;
+        fy = y + h + 2;
       }
       if (item.type === 'break28-coffee-maker') {
-        fx = x + 5;
+        fx = x + 13;
         fy = y + h + 20;
       }
       if (item.type === 'break28-claw') {
@@ -166,6 +218,8 @@ export class IdlePlay {
   navigationBlocked(base: Set<string>, except?: number): Set<string> {
     if (!this.sessions.size) return base;
     const b = new Set(base);
+    const own = except === undefined ? undefined : this.sessions.get(except);
+    if (own?.toy.tv) b.delete(key(own.toy.anchor));
     for (const [id, s] of this.sessions) if (id !== except) b.add(key(s.toy.anchor));
     return b;
   }
@@ -178,6 +232,7 @@ export class IdlePlay {
     ch.frameTimer = 0;
     ch.wanderTimer = 2;
     delete ch.playVisualOffset;
+    delete ch.playTv;
   }
   cancel(ch: Character): boolean {
     this.elapsed.delete(ch.id);
@@ -234,6 +289,27 @@ export class IdlePlay {
     for (const [id, s] of this.sessions) if (!ignore.has(id)) blocked.add(key(s.toy.anchor));
     const from =
       ch.moveProgress > 0 && ch.path[0] ? ch.path[0] : { col: ch.tileCol, row: ch.tileRow };
+    if (toy.tv) {
+      for (const seat of toy.tv.seats) {
+        const t = { col: seat.col, row: seat.row };
+        if (
+          (ctx.seats.get(seat.uid)?.assigned && ch.seatId !== seat.uid) ||
+          [...this.sessions].some(([id, s]) => !ignore.has(id) && key(s.toy.anchor) === key(t)) ||
+          ctx.occupied(t, ch.id, ignore)
+        )
+          continue;
+        // Only this authored couch seat is walkable for its viewer; preserve all other obstacles.
+        const seatedBlocked = new Set(blocked);
+        seatedBlocked.delete(key(t));
+        const path = findPath(from.col, from.row, t.col, t.row, ctx.tileMap, seatedBlocked);
+        if (path.length || (from.col === t.col && from.row === t.row))
+          return {
+            toy: { ...toy, anchor: t, feet: { x: t.col * 16 + 8, y: t.row * 16 + 19 } },
+            path,
+          };
+      }
+      return null;
+    }
     const tiles: Tile[] = [];
     for (let dr = -2; dr <= 2; dr++)
       for (let dc = -2; dc <= 2; dc++)
@@ -269,6 +345,7 @@ export class IdlePlay {
   ): void {
     const edge = ch.state === CharacterState.WALK && ch.moveProgress > 0 ? ch.path.slice(0, 1) : [];
     delete ch.playVisualOffset;
+    delete ch.playTv;
     this.sessions.set(ch.id, {
       toy: pick.toy,
       phase: 'approaching',
@@ -289,6 +366,10 @@ export class IdlePlay {
     ch.frame = 0;
     ch.frameTimer = 0;
     ch.playVisualOffset = { x: s.toy.feet.x - ch.x, y: s.toy.feet.y - ch.y };
+    if (s.toy.tv) {
+      const { x, y, width, depth } = s.toy.tv;
+      ch.playTv = { x, y, width, depth, tint: 0, hueRemaining: 3 + this.random() * 3 };
+    }
   }
   /** One 50% trial per newly formed >=4-player cohort, not a fresh roll every frame. */
   considerMultiplayer(ctx: Context): void {
@@ -450,9 +531,22 @@ export class IdlePlay {
       this.cancel(ch);
       return false;
     }
+    if (ch.playTv) {
+      const tv = ch.playTv;
+      tv.hueRemaining -= dt;
+      while (tv.hueRemaining <= 0) {
+        // Choose a different blue, red or green hue, with a fresh independent 3–6 second hold.
+        tv.tint =
+          (tv.tint +
+            1 +
+            Math.min(TV_TINTS.length - 2, Math.floor(this.random() * (TV_TINTS.length - 1)))) %
+          TV_TINTS.length;
+        tv.hueRemaining += 3 + this.random() * 3;
+      }
+    }
     s.remaining -= dt;
     ch.frameTimer += dt;
-    ch.frame = Math.floor(ch.frameTimer / 0.15) % 8;
+    ch.frame = s.toy.tv ? 0 : Math.floor(ch.frameTimer / 0.15) % 8;
     if (s.remaining <= 0) {
       this.cancel(ch);
       return false;
@@ -462,8 +556,10 @@ export class IdlePlay {
   spriteOverrides(seconds: number): Map<string, SpriteData> {
     const out = new Map<string, SpriteData>();
     for (const s of this.sessions.values())
-      if (s.phase === 'playing')
-        out.set(s.toy.uid, toyAnimation(s.toy.type, s.toy.sprite, seconds));
+      if (s.phase === 'playing') {
+        const sprite = toyAnimation(s.toy.type, s.toy.sprite, seconds);
+        out.set(s.toy.uid, sprite);
+      }
     return out;
   }
 }

@@ -4,9 +4,10 @@ import { clinicRule } from '../clinicRuntime.js';
 import { getColorizedSprite } from '../colorize.js';
 import { hallwayRule } from '../hallwayRuntime.js';
 import { jungleRenderLayer } from '../jungleRuntime.js';
-import { LIBRARY_WORK_SEAT, libraryRenderLayer, libraryWallCourses } from '../libraryRuntime.js';
-import { nsiRackLights, nsiSurfaceDepth } from '../nsiRuntime.js';
+import { LIBRARY_WORK_SEAT,libraryRenderLayer, libraryWallCourses } from '../libraryRuntime.js';
+import { nsiRackLights,nsiSurfaceDepth } from '../nsiRuntime.js';
 import { serviceFurnitureRule } from '../serviceRuntime.js';
+import { spriteRows } from '../sprites/rowCache.js';
 import type {
   FurnitureInstance,
   OfficeLayout,
@@ -131,8 +132,8 @@ export function layoutToFurnitureInstances(
           'splitRow' in clinic && typeof clinic.splitRow === 'number'
             ? clinic.splitRow
             : Math.floor(sprite.length / 2);
-        instances.push({ ...base, sprite: sprite.slice(split), y: drawY + split, zY: -1 });
-        instances.push({ ...base, sprite: sprite.slice(0, split), zY: clinic.depth });
+        instances.push({ ...base, sprite: spriteRows(sprite, split), y: drawY + split, zY: -1 });
+        instances.push({ ...base, sprite: spriteRows(sprite, 0, split), zY: clinic.depth });
       } else instances.push({ ...base, sprite, zY: clinic.depth });
       continue;
     }
@@ -195,8 +196,8 @@ export function layoutToFurnitureInstances(
       spriteH > 1
     ) {
       const split = Math.floor(spriteH / 2);
-      instances.push({ ...base, sprite: sprite.slice(split), y: drawY + split, zY: -1 });
-      instances.push({ ...base, sprite: sprite.slice(0, split), zY });
+      instances.push({ ...base, sprite: spriteRows(sprite, split), y: drawY + split, zY: -1 });
+      instances.push({ ...base, sprite: spriteRows(sprite, 0, split), zY });
     } else {
       const sceneLayer =
         entry.renderLayer === 'floor'

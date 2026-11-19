@@ -1,3 +1,18 @@
+# Fork production successor — November 19, 2026
+
+- Preserve sprite raster-cache identity through weakly keyed furniture row splits
+  and native wall transforms, avoiding repeated canvas allocation and rasterization.
+- Batch opaque six-digit hex sprites into ImageData with the same fractional-zoom
+  integer cell boundaries; preserve the original Canvas path for CSS/alpha colors.
+- Include the deployed TV toy with two eligible couch seats, static seated viewers,
+  soft changing RGB light spill, reservation cleanup and immediate work preemption.
+- Include 24-second / 25-fps air-hockey and foosball loops and current interaction
+  anchor refinements. Keep original furniture pixels, collision and paired-arrival rules.
+- Add portable TV and raster-cache regression tests. Preserve the public one-to-one
+  bridge and omit private projection/mirroring. No external scene packs, runtime
+  state, new binary release, registry publication or production restart.
+- See [current source-sync notes](docs/SOURCE-SYNC-2026-11-19.md).
+
 # Fork source synchronization — November 18, 2026
 
 - Import the deployed frontend room/character runtimes, native animation data,

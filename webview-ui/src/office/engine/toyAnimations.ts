@@ -3,7 +3,7 @@ import type { SpriteData } from '../types.js';
 const cache = new WeakMap<SpriteData, Map<string, SpriteData[]>>();
 export const TOY_FRAME_MS = 100,
   TOY_FRAME_COUNT = 64;
-/** 6.4-second native loops. Fixed cabinets and supports are always copied from approved art. */
+/** Tables 24s/25fps; other toys retain 6.4s/10fps. Fixed cabinets and supports are always copied from approved art. */
 export function toyAnimation(type: string, source: SpriteData, seconds: number): SpriteData {
   let byType = cache.get(source);
   if (!byType) {
@@ -11,12 +11,15 @@ export function toyAnimation(type: string, source: SpriteData, seconds: number):
     cache.set(source, byType);
   }
   let frames = byType.get(type);
+  const table = type === 'break28-hockey' || type === 'break28-foosball';
+  const count = table ? 600 : TOY_FRAME_COUNT,
+    ms = table ? 40 : TOY_FRAME_MS;
   if (!frames) {
-    frames = Array.from({ length: TOY_FRAME_COUNT }, (_, i) => {
+    frames = Array.from({ length: count }, (_, i) => {
       const out = source.map((r) => r.slice()),
         w = source[0].length,
         h = source.length,
-        t = i / TOY_FRAME_COUNT,
+        t = i / count,
         a = t * Math.PI * 2;
       const dot = (x: number, y: number, c: string) => {
         x = Math.round(x);
@@ -32,7 +35,9 @@ export function toyAnimation(type: string, source: SpriteData, seconds: number):
         const n = Math.max(Math.abs(xx - x), Math.abs(yy - y), 1);
         for (let p = 0; p <= n; p++) dot(x + ((xx - x) * p) / n, y + ((yy - y) * p) / n, c);
       };
-      if (type.includes('pinball')) {
+      if (type === 'break28-tv') {
+        // Preserve the approved TV artwork; illumination is only the translucent canvas spill.
+      } else if (type.includes('pinball')) {
         const path = [
           [8, 18],
           [12, 22],
@@ -129,19 +134,40 @@ export function toyAnimation(type: string, source: SpriteData, seconds: number):
         ])
           for (let yy = top; yy <= bottom; yy++)
             for (let xx = l; xx <= r; xx++) opaque(xx, yy, '#e9e9f4');
-        const x = 12 + 31 * (0.5 + 0.5 * Math.sin(a * 2)),
-          y = 12 + 10 * (0.5 + 0.5 * Math.sin(a * 3));
-        opaque(x, y, '#18212a');
-        opaque(x + 1, y, '#edf2f2');
+        // Closed 24s rally; continuous positions, intentional impact-direction changes.
+        const path = [
+          [12, 13],
+          [41, 22],
+          [28, 11],
+          [12, 17],
+          [30, 25],
+          [42, 18],
+          [24, 11],
+          [12, 21],
+          [32, 25],
+          [42, 14],
+          [20, 11],
+          [12, 13],
+        ];
+        const q = t * (path.length - 1),
+          k = Math.floor(q),
+          f = q - k;
+        const from = path[k],
+          to = path[k + 1],
+          x = from[0] + (to[0] - from[0]) * f,
+          y = from[1] + (to[1] - from[1]) * f;
+        // Mallets track the incoming puck without snapping; restrained anticipatory movement.
         for (const [px, py] of [
-          [11, 12 + Math.sin(a) * 4],
-          [42, 21 + Math.sin(a + 1) * 4],
+          [11, 15 + Math.sin(a * 3) * 3 + Math.sin(a * 2) * 1],
+          [42, 18 + Math.sin(a * 4 + 0.6) * 3],
         ]) {
           for (let dx = -2; dx <= 2; dx++)
             for (let dy = -2; dy <= 2; dy++)
               if (dx * dx + dy * dy <= 5) opaque(px + dx, py + dy, dy < 0 ? '#f3a181' : '#bb3b2c');
           opaque(px, py - 1, '#ffe0ad');
         }
+        opaque(x, y, '#18212a');
+        opaque(x + 1, y, '#edf2f2');
       } else if (type === 'break28-foosball') {
         for (let yy = 9; yy <= 48; yy++)
           for (let xx = 9; xx <= 33; xx++) opaque(xx, yy, yy % 3 ? '#1d7831' : '#247e37');
@@ -156,29 +182,47 @@ export function toyAnimation(type: string, source: SpriteData, seconds: number):
         }
         for (let rod = 0; rod < 5; rod++) {
           const y = 13 + rod * 7,
-            shift = Math.round(Math.sin(a + rod) * 2);
+            shift = 2.3 * Math.sin(a * 3 + rod * 0.85) + 0.7 * Math.sin(a * 5 + rod);
           for (let xx = 8; xx <= 34; xx++) opaque(xx, y, '#a6a7a2');
+          // Continuous shaft rotation, with projected bodies and feet instead of two-state flashing.
+          const angle = Math.sin(a * 4 + rod * 1.4) * 1.25 + 0.55 * Math.sin(a * 7 + rod * 0.9);
+          const reach = Math.sin(angle) * 2.5,
+            body = Math.max(0.7, Math.abs(Math.cos(angle)) * 1.6);
           for (let man = 0; man < 3; man++) {
             const x = 13 + man * 7 + shift,
-              c = rod % 2 ? '#246fc5' : '#d75831';
-            opaque(x, y, c);
-            opaque(x + 1, y, c);
-            if ((i + rod * 5) % 16 < 8) {
-              opaque(x, y - 1, rod % 2 ? '#8accf1' : '#ffb369');
-              opaque(x, y + 1, c);
-            } else {
-              opaque(x - 1, y, c);
-              opaque(x + 2, y, rod % 2 ? '#8accf1' : '#ffb369');
-            }
+              c = rod % 2 ? '#246fc5' : '#d75831',
+              hi = rod % 2 ? '#8accf1' : '#ffb369';
+            line(x, y - body, x, y + body, c);
+            line(x + 1, y - body, x + 1, y + body, c);
+            opaque(x, y - body, hi);
+            line(x, y + body, x + reach, y + body, c);
+            opaque(x + reach, y + body, hi);
           }
         }
-        const ballX = 15 + 7 * Math.sin(a * 2),
-          ballY = 14 + 30 * (0.5 + 0.5 * Math.sin(a));
-        opaque(ballX, ballY, '#fff4ce');
+        const rally = [
+          [21, 28],
+          [14, 13],
+          [25, 20],
+          [16, 34],
+          [27, 41],
+          [20, 46],
+          [12, 34],
+          [26, 27],
+          [17, 13],
+          [28, 20],
+          [14, 41],
+          [21, 28],
+        ];
+        const q = t * (rally.length - 1),
+          k = Math.floor(q),
+          f = q - k,
+          from = rally[k],
+          to = rally[k + 1];
+        opaque(from[0] + (to[0] - from[0]) * f, from[1] + (to[1] - from[1]) * f, '#fff4ce');
       }
       return out;
     });
     byType.set(type, frames);
   }
-  return frames[Math.floor(((seconds + 1e-8) * 1000) / TOY_FRAME_MS) % frames.length];
+  return frames[Math.floor(((seconds + 1e-8) * 1000) / ms) % frames.length];
 }

@@ -55,6 +55,7 @@ import {
   hasCarpetSprites,
 } from '../sprites/carpetTiles.js';
 import { getPetSprites } from '../sprites/petSpriteData.js';
+import { spriteHeight,spriteRows } from '../sprites/rowCache.js';
 import { getCachedSprite, getOutlineSprite } from '../sprites/spriteCache.js';
 import { BUBBLE_HEART_SPRITE, getCharacterSprites } from '../sprites/spriteData.js';
 import type {
@@ -67,6 +68,7 @@ import type {
   SpriteData,
   TileType as TileTypeVal,
 } from '../types.js';
+import { CharacterState } from '../types.js';
 import { TILE_SIZE, TileType } from '../types.js';
 import { getWallInstances, hasWallSprites, wallColorToHex } from '../wallTiles.js';
 import { getCharacterSprite } from './characters.js';
@@ -80,6 +82,7 @@ import type {
   RotateButtonBounds,
 } from './selectionButtons.js';
 import { buttonGeometry, placeSelectionButtons, restingBounds } from './selectionButtons.js';
+import { drawTvLight } from './tvLight.js';
 
 // ── Settings ────────────────────────────────────────────────────
 
@@ -449,6 +452,7 @@ export function renderScene(
     // in front of same-row furniture (e.g. chairs) but behind furniture
     // at lower rows (e.g. desks, bookshelves that occlude from below).
     const charZY =
+      (ch.state === CharacterState.PLAY ? ch.playTv?.depth : undefined) ??
       clinicDepth(ch) ??
       nsiDepth(ch) ??
       serviceCharacterDepth(ch) ??
@@ -540,6 +544,10 @@ export function renderScene(
   for (const d of drawables) {
     d.draw(ctx);
   }
+  // Light is composited over the room/viewer, never hidden below rug or couch art.
+  for (const ch of characters)
+    if (ch.state === CharacterState.PLAY && ch.playTv)
+      drawTvLight(ctx, ch.playTv, offsetX, offsetY, zoom);
 }
 
 // ── Seat indicators ─────────────────────────────────────────────
@@ -981,16 +989,9 @@ export function renderFrame(
       const col = f.x / TILE_SIZE,
         row = f.zY / TILE_SIZE - 1;
       if (expandedMitsuki && col >= 16 && col <= 31 && row === 14)
-        return {
-          ...f,
-          sprite: Array.from(
-            { length: TILE_SIZE },
-            (_, y) => f.sprite[Math.floor((y * f.sprite.length) / TILE_SIZE)],
-          ),
-          y: 14 * TILE_SIZE,
-        };
+        return { ...f, sprite: spriteHeight(f.sprite, TILE_SIZE), y: 14 * TILE_SIZE };
       return expandedMitsuki && col >= 16 && col <= 31 && row === 0 && f.y < 0
-        ? { ...f, sprite: f.sprite.slice(-f.y), y: 0 }
+        ? { ...f, sprite: spriteRows(f.sprite, -f.y), y: 0 }
         : f;
     })
     .filter((f) => {

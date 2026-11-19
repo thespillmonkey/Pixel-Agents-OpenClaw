@@ -3,7 +3,7 @@
 > **Later source-sync update:** the documentation-only status described below is
 > the earlier publication checkpoint. The subsequent source sync includes the
 > production runtime minus private bridge changes. See
-> [SOURCE-SYNC-2026-11-18.md](SOURCE-SYNC-2026-11-18.md) for current distribution
+> [SOURCE-SYNC-2026-11-19.md](SOURCE-SYNC-2026-11-19.md) for current distribution
 > scope, portability adjustments and validation. Historical receipts below remain
 > historical evidence, not tests of the new public build.
 

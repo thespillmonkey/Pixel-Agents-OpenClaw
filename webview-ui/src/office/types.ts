@@ -185,6 +185,15 @@ export interface Blinker {
 
 export interface Character extends Blinker {
   playVisualOffset?: { x: number; y: number };
+  /** Static couch pose and screen geometry, present only during TV viewing. */
+  playTv?: {
+    x: number;
+    y: number;
+    width: number;
+    depth: number;
+    tint: number;
+    hueRemaining: number;
+  };
   id: number;
   state: CharacterState;
   dir: Direction;
