@@ -85,8 +85,10 @@ export function OfficeCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef({ x: 0, y: 0 });
-  // Middle-mouse pan state (imperative, no re-renders)
-  const isPanningRef = useRef(false);
+  const panButtonRef = useRef<number | null>(null);
+  const spaceHeldRef = useRef(false);
+  // A left-button pan must not become an editor action or a canvas click.
+  const leftPanRef = useRef(false);
   const panStartRef = useRef({ mouseX: 0, mouseY: 0, panX: 0, panY: 0 });
   // Delete/rotate button bounds (updated each frame by renderer)
   const deleteButtonBoundsRef = useRef<ButtonBounds | null>(null);
@@ -302,8 +304,7 @@ export function OfficeCanvas({
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      // Handle middle-mouse panning
-      if (isPanningRef.current) {
+      if (panButtonRef.current !== null) {
         const dpr = window.devicePixelRatio || 1;
         const dx = (e.clientX - panStartRef.current.mouseX) * dpr;
         const dy = (e.clientY - panStartRef.current.mouseY) * dpr;
@@ -448,12 +449,13 @@ export function OfficeCanvas({
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       unlockAudio();
-      // Middle mouse button (button 1) starts panning
-      if (e.button === 1) {
+      if (e.button === 0) leftPanRef.current = spaceHeldRef.current;
+      if (e.button === 1 || (e.button === 0 && leftPanRef.current)) {
         e.preventDefault();
         // Break camera follow + greeter centering on manual pan
         officeState.breakCameraFollow();
-        isPanningRef.current = true;
+        panButtonRef.current = e.button;
+        if (e.button === 0) canvasRef.current?.focus({ preventScroll: true });
         panStartRef.current = {
           mouseX: e.clientX,
           mouseY: e.clientY,
@@ -543,14 +545,17 @@ export function OfficeCanvas({
     ],
   );
 
+  const endPan = useCallback(() => {
+    if (panButtonRef.current === null) return;
+    panButtonRef.current = null;
+    const canvas = canvasRef.current;
+    if (canvas) canvas.style.cursor = isEditMode ? 'crosshair' : 'default';
+  }, [isEditMode]);
+
   const handleMouseUp = useCallback(
     (e: React.MouseEvent) => {
-      if (e.button === 1) {
-        isPanningRef.current = false;
-        const canvas = canvasRef.current;
-        if (canvas) canvas.style.cursor = isEditMode ? 'crosshair' : 'default';
-        return;
-      }
+      if (e.button === panButtonRef.current) endPan();
+      if (e.button === 1 || (e.button === 0 && leftPanRef.current)) return;
       if (e.button === 2) {
         isEraseDraggingRef.current = false;
         // Close the in-progress stroke so the next stroke starts a fresh undo
@@ -603,7 +608,7 @@ export function OfficeCanvas({
     },
     [
       editorState,
-      isEditMode,
+      endPan,
       onDrop,
       onEditorSelectionChange,
       onRotateSelected,
@@ -702,6 +707,10 @@ export function OfficeCanvas({
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
+      if (leftPanRef.current && e.detail > 0) {
+        leftPanRef.current = false;
+        return;
+      }
       if (isEditMode) return; // handled by mouseDown/mouseUp
       performTap(e.clientX, e.clientY);
     },
@@ -709,7 +718,7 @@ export function OfficeCanvas({
   );
 
   const handleMouseLeave = useCallback(() => {
-    isPanningRef.current = false;
+    endPan();
     editorState.selectionButtonHover = null;
     editorState.selectionButtonPressed = null;
     isEraseDraggingRef.current = false;
@@ -728,7 +737,37 @@ export function OfficeCanvas({
         canvas.style.cursor = 'default';
       }
     }
-  }, [officeState, editorState, isEditMode]);
+  }, [officeState, editorState, isEditMode, endPan]);
+
+  useEffect(() => {
+    const holdSpace = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target;
+      if (target instanceof HTMLElement) {
+        if (target.isContentEditable || target.closest('input, textarea, select, [role="textbox"]'))
+          return;
+        // Preserve Space activation on buttons. Focus moves to the canvas only
+        // if the user actually starts a pan.
+        if (target === document.body || target === canvasRef.current) e.preventDefault();
+      }
+      if (!e.repeat) spaceHeldRef.current = true;
+    };
+    const releaseSpace = (e: KeyboardEvent) => {
+      if (e.code === 'Space') spaceHeldRef.current = false;
+    };
+    const cancelPan = () => {
+      spaceHeldRef.current = false;
+      endPan();
+    };
+    window.addEventListener('keydown', holdSpace);
+    window.addEventListener('keyup', releaseSpace);
+    window.addEventListener('blur', cancelPan);
+    return () => {
+      window.removeEventListener('keydown', holdSpace);
+      window.removeEventListener('keyup', releaseSpace);
+      window.removeEventListener('blur', cancelPan);
+    };
+  }, [endPan]);
 
   // Alt tapped or released with the mouse already down flips the in-flight drag
   // between move and copy without waiting for the next mouse move — the rAF
@@ -824,6 +863,7 @@ export function OfficeCanvas({
       <canvas
         ref={canvasRef}
         data-testid={OFFICE_CANVAS_TEST_ID}
+        tabIndex={-1}
         onMouseMove={handleMouseMove}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}

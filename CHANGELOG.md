@@ -1,5 +1,9 @@
 # Fork production successor — November 19, 2026
 
+## Production sync — 2026-11-23
+
+Desktop office controls, Space-drag panning, and longer leisure with north-facing arm motion. See [the production delta](docs/PRODUCTION-DELTA-2026-11-23.md) for behavior, validation scope, and public-fork boundaries.
+
 - Preserve sprite raster-cache identity through weakly keyed furniture row splits
   and native wall transforms, avoiding repeated canvas allocation and rasterization.
 - Batch opaque six-digit hex sprites into ImageData with the same fractional-zoom

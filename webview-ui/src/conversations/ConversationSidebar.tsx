@@ -1,13 +1,12 @@
 import type { TabStatus } from '../components/AgentCard.js';
-import { Button } from '../components/ui/Button.js';
 import { CONVERSATION_SIDEBAR_WIDTH_PX, SIDE_PANEL_CONTENT_SHIFT_PX } from '../constants.js';
 import { useSlidePanel } from '../hooks/useSlidePanel.js';
 import { ConversationList, type ConversationSearchScope } from './ConversationList.js';
 
 /**
  * Left-docked home of the recent conversations (ConversationList) on the
- * desktop (shown and hidden by the button above the zoom buttons), with Settings pinned at its foot (the phone's menu,
- * docked). Pressing a conversation resumes it: the agent comes back as that
+ * desktop, toggled from the bottom toolbar. Pressing a conversation resumes it:
+ * the agent comes back as that
  * character, in its old seat when that is free. Standalone only: resuming
  * needs a terminal. The phone has MobileMenu.
  *
@@ -22,8 +21,6 @@ interface ConversationSidebarProps {
   /** A running conversation pressed: go to its agent, as its card would. */
   onOpenAgent: (agentId: number) => void;
   statusFor: (agentId: number) => TabStatus | null;
-  isSettingsOpen: boolean;
-  onToggleSettings: () => void;
   /** Open the conversation search. */
   onSearch?: (scope: ConversationSearchScope) => void;
 }
@@ -33,8 +30,6 @@ export function ConversationSidebar({
   onResume,
   onOpenAgent,
   statusFor,
-  isSettingsOpen,
-  onToggleSettings,
   onSearch,
 }: ConversationSidebarProps) {
   const { rendered, shown, panelTransition, contentTransition, onPanelTransitionEnd } =
@@ -69,18 +64,6 @@ export function ConversationSidebar({
           statusFor={statusFor}
           onSearch={onSearch}
         />
-        <div className="p-8 border-t-2 border-border">
-          <Button
-            size="md"
-            icon="settings"
-            // Flat until hovered (or open), its icon and label to the left.
-            variant={isSettingsOpen ? 'active' : 'ghost'}
-            className={`w-full text-left ${isSettingsOpen ? '' : 'text-text! hover:bg-btn-hover'}`}
-            onClick={onToggleSettings}
-          >
-            Settings
-          </Button>
-        </div>
       </aside>
     </div>
   );

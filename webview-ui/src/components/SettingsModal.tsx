@@ -15,6 +15,8 @@ import { PixelIcon } from './ui/PixelIcon.js';
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  agentsOnTop: boolean;
+  onToggleAgentsOnTop?: () => void;
   isDebugMode: boolean;
   onToggleDebugMode: () => void;
   alwaysShowOverlay: boolean;
@@ -55,6 +57,8 @@ interface SettingsModalProps {
 export function SettingsModal({
   isOpen,
   onClose,
+  agentsOnTop,
+  onToggleAgentsOnTop,
   isDebugMode,
   onToggleDebugMode,
   alwaysShowOverlay,
@@ -221,6 +225,9 @@ export function SettingsModal({
             transport.send({ type: 'setSoundEnabled', enabled: newVal });
           }}
         />
+        {onToggleAgentsOnTop && (
+          <Checkbox label="Agents On Top" checked={agentsOnTop} onChange={onToggleAgentsOnTop} />
+        )}
         <Checkbox
           label="Music Player"
           title="The office radio's player, bottom of the office"

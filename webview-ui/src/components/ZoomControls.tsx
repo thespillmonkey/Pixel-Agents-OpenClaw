@@ -15,8 +15,8 @@ import { PixelText } from './ui/PixelText.js';
 interface ZoomControlsProps {
   zoom: number;
   onZoomChange: (zoom: number) => void;
-  /** The conversation sidebar's toggle, above the zoom buttons (only where there is a sidebar). */
-  sidebar?: { open: boolean; onToggle: () => void };
+  vertical?: boolean;
+  compact?: boolean;
 }
 
 /**
@@ -88,69 +88,55 @@ export function MobileZoomLevel({ zoom }: { zoom: number }) {
   );
 }
 
-export function ZoomControls({ zoom, onZoomChange, sidebar }: ZoomControlsProps) {
+export function ZoomControls({
+  zoom,
+  onZoomChange,
+  vertical = false,
+  compact = false,
+}: ZoomControlsProps) {
   const flash = useZoomFlash(zoom);
   const [hovered, setHovered] = useState(false);
-  // Bumped per toggle: remounts the icon so its pop plays (never on first paint).
-  const [toggles, setToggles] = useState(0);
 
   const minDisabled = zoom <= ZOOM_MIN;
   const maxDisabled = zoom >= ZOOM_MAX;
   const levelShown = hovered || (flash.visible && !flash.fading);
+  const buttonClass = `border-border! shadow-pixel disabled:hover:bg-btn-bg disabled:cursor-default disabled:opacity-(--btn-disabled-opacity) ${compact ? 'h-24! w-24!' : ''}`;
 
   return (
-    <>
-      {/* Vertically stacked round buttons — top-left */}
-      <div className="absolute top-8 left-8 z-10 flex flex-col gap-4">
-        {sidebar && (
-          <Button
-            size="icon_lg"
-            variant={sidebar.open ? 'active' : 'default'}
-            onClick={() => {
-              setToggles((n) => n + 1);
-              sidebar.onToggle();
-            }}
-            aria-pressed={sidebar.open}
-            className="border-border! shadow-pixel mb-4"
-            title={sidebar.open ? 'Hide conversations' : 'Show conversations'}
-          >
-            <span key={toggles} className={`flex ${toggles > 0 ? 'pixel-pop' : ''}`}>
-              <PixelIcon name={sidebar.open ? 'sidebar' : 'sidebarShut'} />
-            </span>
-          </Button>
-        )}
-        {/* + and -, with the level right of them, centred between the two:
-            shown while either is hovered and for a moment after a change. */}
-        <div
-          className="relative flex flex-col gap-4"
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-        >
-          <Button
-            size="icon_lg"
-            onClick={() => onZoomChange(zoom + ZOOM_STEP)}
-            disabled={maxDisabled}
-            className="border-border! shadow-pixel disabled:hover:bg-btn-bg disabled:cursor-default disabled:opacity-(--btn-disabled-opacity)"
-            title="Zoom in (Ctrl+Scroll)"
-          >
-            <PixelIcon name="zoomIn" />
-          </Button>
-          <Button
-            size="icon_lg"
-            onClick={() => onZoomChange(zoom - ZOOM_STEP)}
-            disabled={minDisabled}
-            className="border-border! shadow-pixel disabled:hover:bg-btn-bg disabled:cursor-default disabled:opacity-(--btn-disabled-opacity)"
-            title="Zoom out (Ctrl+Scroll)"
-          >
-            <PixelIcon name="zoomOut" />
-          </Button>
-          <ZoomLevelText
-            zoom={zoom}
-            shown={levelShown}
-            className="left-full top-1/2 -translate-y-1/2 ml-12"
-          />
-        </div>
-      </div>
-    </>
+    <div
+      className={`relative flex shrink-0 items-center gap-4 ${vertical ? 'flex-col' : ''}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <Button
+        size="icon_lg"
+        onClick={() => onZoomChange(zoom + ZOOM_STEP)}
+        disabled={maxDisabled}
+        className={buttonClass}
+        aria-label="Zoom in"
+        title="Zoom in (Ctrl+Scroll)"
+      >
+        <PixelIcon name="zoomIn" />
+      </Button>
+      <Button
+        size="icon_lg"
+        onClick={() => onZoomChange(zoom - ZOOM_STEP)}
+        disabled={minDisabled}
+        className={buttonClass}
+        aria-label="Zoom out"
+        title="Zoom out (Ctrl+Scroll)"
+      >
+        <PixelIcon name="zoomOut" />
+      </Button>
+      <ZoomLevelText
+        zoom={zoom}
+        shown={levelShown}
+        className={
+          vertical
+            ? 'left-full top-1/2 -translate-y-1/2 ml-12'
+            : 'left-1/2 top-0 -translate-x-1/2 -translate-y-full pb-8'
+        }
+      />
+    </div>
   );
 }

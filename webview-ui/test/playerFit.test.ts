@@ -69,7 +69,7 @@ describe('clampDrawerWidth and the office minimum', () => {
   });
 
   it('leaves a narrower drawer alone', () => {
-    expect(clampDrawerWidth(520, 1440, 260)).toBe(520);
+    expect(clampDrawerWidth(480, 1440, 260)).toBe(480);
   });
 
   it('keeps the drawer its own minimum on a window too small for both', () => {

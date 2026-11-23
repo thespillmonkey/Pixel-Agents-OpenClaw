@@ -149,6 +149,22 @@ function App() {
 
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [agentsOnTop, setAgentsOnTop] = useState(() => {
+    try {
+      return localStorage.getItem('pixel-agents.agents-on-top') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleAgentsOnTop = () => {
+    const next = !agentsOnTop;
+    setAgentsOnTop(next);
+    try {
+      localStorage.setItem('pixel-agents.agents-on-top', next ? '1' : '0');
+    } catch {
+      // The current page can still change layouts when storage is unavailable.
+    }
+  };
   const [appearanceAgentId, setAppearanceAgentId] = useState<number | null>(null);
   const closeAppearance = useCallback(() => setAppearanceAgentId(null), []);
   // The Layout editor's panel, kept on screen while it rolls shut.
@@ -584,14 +600,11 @@ function App() {
         <>
           {/* Mobile: pinch replaces the zoom buttons, and the toolbar's
                 jobs move to the card bar (+) and the floating Settings button. */}
-          {isMobile ? (
-            <MobileZoomLevel zoom={editor.zoom} />
-          ) : (
-            <ZoomControls
-              zoom={editor.zoom}
-              onZoomChange={editor.handleZoomChange}
-              sidebar={hasSidebar ? { open: sidebar.open, onToggle: sidebar.toggle } : undefined}
-            />
+          {isMobile && <MobileZoomLevel zoom={editor.zoom} />}
+          {!isMobile && officeReadOnly && (
+            <div className="absolute top-8 left-8 z-10">
+              <ZoomControls zoom={editor.zoom} onZoomChange={editor.handleZoomChange} vertical />
+            </div>
           )}
 
           {/* The provider's plan usage, top-left (Settings → Usage Bars). */}
@@ -689,7 +702,9 @@ function App() {
               zoom={editor.zoom}
               panRef={editor.panRef}
               onCloseAgent={handleCloseAgent}
-              onAgentAppearance={isBrowserRuntime && !officeReadOnly ? setAppearanceAgentId : undefined}
+              onAgentAppearance={
+                isBrowserRuntime && !officeReadOnly ? setAppearanceAgentId : undefined
+              }
               labelsOnlyOnWork={labelsOnlyOnWork}
               cleanerAgentLabels={cleanerAgentLabels}
               alwaysShowOverlay={alwaysShowOverlay}
@@ -751,9 +766,13 @@ function App() {
           onToggleEditMode={editor.handleToggleEditMode}
           isSettingsOpen={isSettingsOpen}
           onToggleSettings={() => setIsSettingsOpen((v) => !v)}
-          // Where there is a conversation sidebar, Settings lives only at its
-          // foot (shut, it is one click away), never also in the toolbar.
-          showSettings={!hasSidebar}
+          zoom={isDebugMode ? undefined : editor.zoom}
+          onZoomChange={editor.handleZoomChange}
+          sidebar={
+            !isDebugMode && hasSidebar
+              ? { open: sidebar.open, onToggle: sidebar.toggle }
+              : undefined
+          }
           isCharactersOpen={isCharactersOpen}
           onOpenCharacters={openCharacters}
           directories={directories}
@@ -811,12 +830,31 @@ function App() {
     </div>
   );
 
+  const desktopAgentBar = !(isDebugMode && !terminalAvailable) && (
+    <AgentCardBar
+      agentIds={cardAgents}
+      horizontal={agentsOnTop}
+      activeAgentId={terminalAvailable ? terminalDrawer.shownAgentId : null}
+      focusedAgentId={focusedAgentId}
+      getAppearance={terminalDrawer.getAppearance}
+      statusFor={terminalDrawer.statusFor}
+      onSelect={handleCardSelect}
+      onClose={handleCloseAgent}
+      onReorder={officeReadOnly ? undefined : saveCardOrder}
+      trailing={
+        terminalAvailable && terminalAgentIds.length > 0 ? (
+          <TerminalHideRibbon shown={terminalDrawer.isOpen} onHide={terminalDrawer.close} />
+        ) : undefined
+      }
+    />
+  );
+
   return (
     // Desktop: split view — the office region flexes to fill the space left of
     // the terminal panel. Mobile: a column — the sliding office/terminal track
     // on top, the agent-card bar pinned along the bottom.
     <div
-      className={`w-full h-full relative overflow-hidden flex ${isMobile ? 'flex-col' : ''}`}
+      className="w-full h-full relative overflow-hidden flex flex-col"
       style={
         isMobile && keyboard.clampHeight !== null ? { height: keyboard.clampHeight } : undefined
       }
@@ -842,57 +880,37 @@ function App() {
         />
       ) : (
         <>
-          {hasSidebar && (
-            <ConversationSidebar
-              open={sidebar.open}
-              onResume={resumeAndFocus}
-              onOpenAgent={openAgentFromSidebar}
-              statusFor={terminalDrawer.statusFor}
-              isSettingsOpen={isSettingsOpen}
-              onToggleSettings={() => setIsSettingsOpen((v) => !v)}
-              onSearch={setConversationSearch}
-            />
-          )}
+          {agentsOnTop && desktopAgentBar}
+          <div className="flex flex-1 min-h-0 min-w-0">
+            {hasSidebar && (
+              <ConversationSidebar
+                open={sidebar.open}
+                onResume={resumeAndFocus}
+                onOpenAgent={openAgentFromSidebar}
+                statusFor={terminalDrawer.statusFor}
+                onSearch={setConversationSearch}
+              />
+            )}
 
-          {officeRegion}
+            {officeRegion}
 
-          {/* The same cards, in the same order, as the phone's bar: every
-              main agent, external sessions included. A card with a terminal
-              pane is its tab (standalone); any other raises the agent's
-              editor terminal where there is one (VS Code) and selects its
-              character. */}
-          {!(isDebugMode && !terminalAvailable) && (
-            <AgentCardBar
-              agentIds={cardAgents}
-              activeAgentId={terminalAvailable ? terminalDrawer.shownAgentId : null}
-              focusedAgentId={focusedAgentId}
-              getAppearance={terminalDrawer.getAppearance}
-              statusFor={terminalDrawer.statusFor}
-              onSelect={handleCardSelect}
-              onClose={handleCloseAgent}
-              onReorder={officeReadOnly ? undefined : saveCardOrder}
-              trailing={
-                terminalAvailable && terminalAgentIds.length > 0 ? (
-                  <TerminalHideRibbon shown={terminalDrawer.isOpen} onHide={terminalDrawer.close} />
-                ) : undefined
-              }
-            />
-          )}
+            {!agentsOnTop && desktopAgentBar}
 
-          {/* Standalone with a terminal: terminalAvailable is only ever true when
+            {/* Standalone with a terminal: terminalAvailable is only ever true when
               the server reports a working PTY to a tokened session, which VS
               Code's surface never does. In flow as a flex sibling so the office
               region reflows beside it instead of being overlaid. */}
-          {terminalAvailable && (
-            <TerminalDrawer
-              agentIds={terminalAgentIds}
-              shownAgentId={terminalDrawer.shownAgentId}
-              isOpen={terminalDrawer.isOpen}
-              widthPx={terminalDrawer.widthPx}
-              onResizeStart={terminalDrawer.onResizeStart}
-              onStatusChange={terminalDrawer.onStatusChange}
-            />
-          )}
+            {terminalAvailable && (
+              <TerminalDrawer
+                agentIds={terminalAgentIds}
+                shownAgentId={terminalDrawer.shownAgentId}
+                isOpen={terminalDrawer.isOpen}
+                widthPx={terminalDrawer.widthPx}
+                onResizeStart={terminalDrawer.onResizeStart}
+                onStatusChange={terminalDrawer.onStatusChange}
+              />
+            )}
+          </div>
         </>
       )}
 
@@ -999,6 +1017,8 @@ function App() {
 
       <SettingsModal
         isOpen={isSettingsOpen}
+        agentsOnTop={agentsOnTop}
+        onToggleAgentsOnTop={isMobile ? undefined : toggleAgentsOnTop}
         onClose={() => setIsSettingsOpen(false)}
         isDebugMode={isDebugMode}
         onToggleDebugMode={handleToggleDebugMode}

@@ -9,7 +9,7 @@ function decode(id: number): SpriteData {
   }
   return s;
 }
-export function standingPlay(ch: Character): SpriteData | null {
+export function standingPlay(ch: Character, frame = ch.frame): SpriteData | null {
   const names = data.characters;
   let name: string | undefined;
   for (const label of [ch.directoryName, ch.agentName]) {
@@ -33,5 +33,5 @@ export function standingPlay(ch: Character): SpriteData | null {
     } as const
   )[ch.dir];
   const seq = names[name as keyof typeof names][di];
-  return decode(seq[ch.frame % seq.length]);
+  return decode(seq[frame % seq.length]);
 }

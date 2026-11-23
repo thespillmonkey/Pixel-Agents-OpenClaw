@@ -852,9 +852,9 @@ export const MUSIC_VOLUME_SLIDER_HEIGHT_PX = 88;
 /** Gap between the player and the office's foot. */
 export const MUSIC_PLAYER_BOTTOM_PX = 10;
 /** Desktop: the office width kept for the bottom-left toolbar when sizing the
- *  player beside it: the toolbar's right edge at its widest (342 px, with
- *  Settings), a 10 px gap and the player's 10 px right margin. */
-export const MUSIC_PLAYER_TOOLBAR_ROOM_PX = 362;
+ *  player beside it: the expanded toolbar including the collapse tab, zoom,
+ *  and the optional conversation toggle, plus the gap and right margin. */
+export const MUSIC_PLAYER_TOOLBAR_ROOM_PX = 540;
 /** The player without its visualizer (82 px and a 6 px gap less). */
 export const MUSIC_PLAYER_NO_VISUALIZER_WIDTH_PX = 276;
 /** The narrowest player that still shows the tune's name and mood; with less

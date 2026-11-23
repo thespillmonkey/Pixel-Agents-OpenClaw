@@ -20,6 +20,8 @@ import { TV_TINTS } from './tvLight.js';
 export const IDLE_PLAY_INTERVAL = 60,
   IDLE_PLAY_CHANCE = 0.3;
 export const MULTIPLAYER_CHANCE = 0.5;
+export const PLAY_DURATION_MIN = 300,
+  PLAY_DURATION_RANGE = 120;
 export const TOY_TYPES = new Set([
   'break28-arcade',
   'break28-pinball-space',
@@ -436,7 +438,7 @@ export class IdlePlay {
       choices[Math.min(choices.length - 1, Math.floor(this.random() * choices.length))];
     this.cancel(a);
     this.cancel(b);
-    const duration = 24 + this.random() * 16;
+    const duration = PLAY_DURATION_MIN + this.random() * PLAY_DURATION_RANGE;
     this.begin(a, pa, duration, bid);
     this.begin(b, pb, duration, aid);
   }
@@ -467,7 +469,7 @@ export class IdlePlay {
       if (!choices.length) return false;
       const pick =
         choices[Math.min(choices.length - 1, Math.floor(this.random() * choices.length))];
-      this.begin(ch, pick, 20 + this.random() * 20);
+      this.begin(ch, pick, PLAY_DURATION_MIN + this.random() * PLAY_DURATION_RANGE);
       s = this.sessions.get(ch.id)!;
     }
     const t = s.toy.anchor,

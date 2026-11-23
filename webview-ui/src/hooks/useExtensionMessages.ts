@@ -6,6 +6,7 @@ import { castStore } from '../characters/castStore.js';
 import { startOfficeSync } from '../characters/officeSprites.js';
 import { cardOrderOf } from '../components/cardBar.js';
 import { playDoneSound, playPermissionSound, setSoundEnabled } from '../notificationSound.js';
+import { effectiveAgentStatus } from '../office/activityStatus.js';
 import { clearAgentContextUsed, setAgentContextUsed } from '../office/contextGauge.js';
 import type { ExistingAgentMeta, PendingAgent } from '../office/engine/existingAgents.js';
 import {
@@ -628,7 +629,7 @@ export function useExtensionMessages(
         setSelectedAgent(id);
       } else if (msg.type === 'agentStatus') {
         const id = msg.id as number;
-        const status = msg.status as string;
+        const status = effectiveAgentStatus(msg.status as string, os.characters.get(id) ?? {});
         markSeenActivity(id);
         setAgentStatuses((prev) => {
           if (status === 'active') return omitKey(prev, id);

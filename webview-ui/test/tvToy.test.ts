@@ -106,7 +106,7 @@ it('releases TV and pose on timeout, layout replacement and disappearance', () =
     const f = setup();
     f.p.update(f.ch, 60, f.ctx);
     arrive(f);
-    if (end === 'timeout') f.p.update(f.ch, 21, f.ctx);
+    if (end === 'timeout') f.p.update(f.ch, 301, f.ctx);
     else if (end === 'layout') f.p.configure({ ...layout, furniture: [] }, [f.ch]);
     else f.p.forget(1);
     expect(f.p.sessions.size).toBe(0);

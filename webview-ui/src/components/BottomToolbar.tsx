@@ -1,3 +1,5 @@
+import { useId, useState } from 'react';
+
 import { ROSTER_ARROW_WIDTH_PX, ROSTER_HOVER_CLOSE_DELAY_MS } from '../constants.js';
 import type { Directory } from '../hooks/useExtensionMessages.js';
 import { useHoverPin } from '../hooks/useHoverPin.js';
@@ -8,14 +10,16 @@ import { CharacterRow } from './CharacterPicker.js';
 import { LaunchDrawer } from './LaunchDrawer.js';
 import { Button } from './ui/Button.js';
 import { PixelIcon } from './ui/PixelIcon.js';
+import { ZoomControls } from './ZoomControls.js';
 
 interface BottomToolbarProps {
   isEditMode: boolean;
   onToggleEditMode: () => void;
   isSettingsOpen: boolean;
   onToggleSettings: () => void;
-  /** False when the conversation sidebar holds Settings instead. */
-  showSettings: boolean;
+  zoom?: number;
+  onZoomChange: (zoom: number) => void;
+  sidebar?: { open: boolean; onToggle: () => void };
   /** The Characters view is open (the button shows active). */
   isCharactersOpen: boolean;
   /** Opens the Characters view: editing a roster card, or its `+ New`. */
@@ -34,19 +38,18 @@ interface BottomToolbarProps {
   onLaunch: (directory: Directory, palette?: number) => void;
 }
 
-/** Every toolbar button's height: the labelled ones' natural height (26 px
- *  text + padding) rounded to whole pixels, so the + can be an exact square. */
-const ROW_HEIGHT = 'h-52';
-/** The + launch button: a square as tall as its row, the + centred (the
- *  phone's + card, MobileAgentBar). */
-const LAUNCH_SQUARE = 'size-52 flex items-center justify-center border-2 rounded-none select-none';
+/** A 24 px row plus 2 px each of padding and border makes a 32 px panel. */
+const LABEL_BUTTON = 'h-24 flex items-center py-0! px-6! leading-none press-juice';
+const LAUNCH_SQUARE = 'size-24 flex items-center justify-center border-2 rounded-none select-none';
 
 export function BottomToolbar({
   isEditMode,
   onToggleEditMode,
   isSettingsOpen,
   onToggleSettings,
-  showSettings,
+  zoom,
+  onZoomChange,
+  sidebar,
   isCharactersOpen,
   onOpenCharacters,
   directories,
@@ -72,6 +75,16 @@ export function BottomToolbar({
     escapeClosesDrawer: true,
   });
   const { isDrawerOpen, closeDrawer } = menus;
+  const [controlsHidden, setControlsHidden] = useState(false);
+  const controlsId = useId();
+
+  const toggleControls = () => {
+    if (!controlsHidden) {
+      closeDrawer();
+      menus.closeRoster();
+    }
+    setControlsHidden(!controlsHidden);
+  };
 
   // A plain press never launches: it opens the plain drawer (dropping any
   // roster pick, as on the phone), and the launch happens from a Directory row. Hovering opens it too, and leaving shuts it again;
@@ -105,11 +118,9 @@ export function BottomToolbar({
   const rosterPanel = usePresence(menus.isRosterOpen);
 
   return (
-    // Bottom-left. The terminal panel docks on the right edge, so it never
-    // reaches these buttons and no lift is needed. The column spans the
-    // office so the roster above the toolbar can use its width; it passes
-    // presses through everywhere but its panels.
-    <div className="absolute left-10 right-10 bottom-10 z-20 flex flex-col items-start gap-4 pointer-events-none">
+    // Pin to the viewport so a docked conversation sidebar cannot push the
+    // controls away from the corner. Clicks pass through outside the panels.
+    <div className="fixed left-0 right-10 bottom-0 z-20 flex flex-col items-start gap-4 pointer-events-none">
       {rosterPanel.mounted && (
         <div
           ref={menus.rosterRef}
@@ -133,110 +144,143 @@ export function BottomToolbar({
           />
         </div>
       )}
-      <div className="pointer-events-auto flex items-center gap-4 pixel-panel p-4">
-        {/* The + and, right of it, the roster's arrow: one card, two buttons,
+      <div className="relative flex max-w-full items-stretch">
+        <Button
+          type="button"
+          size="icon_lg"
+          className="relative z-10 h-auto! w-20! shrink-0 pointer-events-auto border-border! shadow-pixel"
+          title={controlsHidden ? 'Show office controls' : 'Hide office controls'}
+          aria-label={controlsHidden ? 'Show office controls' : 'Hide office controls'}
+          aria-expanded={!controlsHidden}
+          aria-controls={controlsId}
+          onClick={toggleControls}
+        >
+          <span className={`flex ${controlsHidden ? '-rotate-90' : 'rotate-90'}`}>
+            <PixelIcon name="down" scale={1} />
+          </span>
+        </Button>
+        <div
+          id={controlsId}
+          inert={controlsHidden}
+          className={`flex min-w-0 flex-wrap items-center gap-4 pixel-panel p-2 transition-[translate,opacity] duration-200 motion-reduce:transition-none ${controlsHidden ? '-translate-x-full opacity-0 pointer-events-none' : 'pointer-events-auto'}`}
+        >
+          {/* The + and, right of it, the roster's arrow: one card, two buttons,
             as on the phone's bar. The arrow points up while the roster is
             shut and turns down while it is open; a press toggles it. */}
-        <div className="flex shrink-0">
-          {showUnavailable && (
-            <button
-              type="button"
-              disabled
-              title={terminalUnavailableReason ?? 'Terminal unavailable on this server.'}
-              aria-label="New agent"
-              className={`${LAUNCH_SQUARE} bg-btn-bg border-border text-text-muted cursor-default opacity-(--btn-disabled-opacity)`}
-            >
-              <PixelIcon name="plus" />
-            </button>
-          )}
-          {canLaunch && (
-            <div
-              ref={menus.launchRef}
-              className="relative"
-              // Hover is the desktop secondary gesture (long-press is the mobile
-              // one): it opens the drawer without committing to a launch.
-              onMouseEnter={drawerHover.enter}
-              onMouseLeave={drawerHover.leave}
-            >
+          <div className="flex shrink-0">
+            {showUnavailable && (
               <button
                 type="button"
-                onClick={drawerHover.press}
+                disabled
+                title={terminalUnavailableReason ?? 'Terminal unavailable on this server.'}
                 aria-label="New agent"
-                title="Launch agent"
-                className={`${LAUNCH_SQUARE} press-juice border-accent text-white cursor-pointer ${isDrawerOpen ? 'bg-accent-bright' : 'bg-accent hover:bg-accent-bright'}`}
+                className={`${LAUNCH_SQUARE} bg-btn-bg border-border text-text-muted cursor-default opacity-(--btn-disabled-opacity)`}
               >
-                {/* A quarter turn while its drawer is open (a + looks the
-                    same either way, so it rests crisp). */}
-                <span
-                  className={`flex transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isDrawerOpen ? 'rotate-90' : ''}`}
-                >
-                  <PixelIcon name="plus" />
-                </span>
+                <PixelIcon name="plus" />
               </button>
-              <LaunchDrawer
-                isOpen={isDrawerOpen}
-                directories={directories}
-                pick={menus.pendingPick}
-                onSelect={handleDirectorySelect}
-                onAddDirectory={() => {
-                  closeDrawer();
-                  onAddDirectory();
-                }}
-                onEditDirectory={(directory) => {
-                  closeDrawer();
-                  onEditDirectory(directory);
-                }}
-              />
-            </div>
-          )}
-          <button
-            ref={menus.buttonRef}
-            type="button"
-            onClick={rosterHover.press}
-            onMouseEnter={rosterHover.enter}
-            onMouseLeave={rosterHover.leave}
-            aria-label="Roster"
-            aria-expanded={menus.isRosterOpen}
-            title={
-              menus.isRosterOpen
-                ? 'Hide roster'
-                : 'Launch an agent as one of your characters, or edit them'
-            }
-            // Enabled even when nothing can launch: a pick then edits.
-            style={{ width: ROSTER_ARROW_WIDTH_PX }}
-            className={`h-52 press-juice flex items-center justify-center border-2 border-l-bg/40 rounded-none select-none cursor-pointer ${
-              canLaunch
-                ? `border-accent text-white ${menus.isRosterOpen || isCharactersOpen ? 'bg-accent-bright' : 'bg-accent hover:bg-accent-bright'}`
-                : 'bg-btn-bg border-border text-text-muted'
-            }`}
-          >
-            <span
-              className={`flex transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${menus.isRosterOpen ? '' : 'rotate-180'}`}
+            )}
+            {canLaunch && (
+              <div
+                ref={menus.launchRef}
+                className="relative"
+                // Hover is the desktop secondary gesture (long-press is the mobile
+                // one): it opens the drawer without committing to a launch.
+                onMouseEnter={drawerHover.enter}
+                onMouseLeave={drawerHover.leave}
+              >
+                <button
+                  type="button"
+                  onClick={drawerHover.press}
+                  aria-label="New agent"
+                  title="Launch agent"
+                  className={`${LAUNCH_SQUARE} press-juice border-accent text-white cursor-pointer ${isDrawerOpen ? 'bg-accent-bright' : 'bg-accent hover:bg-accent-bright'}`}
+                >
+                  {/* A quarter turn while its drawer is open (a + looks the
+                    same either way, so it rests crisp). */}
+                  <span
+                    className={`flex transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isDrawerOpen ? 'rotate-90' : ''}`}
+                  >
+                    <PixelIcon name="plus" />
+                  </span>
+                </button>
+                <LaunchDrawer
+                  isOpen={isDrawerOpen}
+                  directories={directories}
+                  pick={menus.pendingPick}
+                  onSelect={handleDirectorySelect}
+                  onAddDirectory={() => {
+                    closeDrawer();
+                    onAddDirectory();
+                  }}
+                  onEditDirectory={(directory) => {
+                    closeDrawer();
+                    onEditDirectory(directory);
+                  }}
+                />
+              </div>
+            )}
+            <button
+              ref={menus.buttonRef}
+              type="button"
+              onClick={rosterHover.press}
+              onMouseEnter={rosterHover.enter}
+              onMouseLeave={rosterHover.leave}
+              aria-label="Roster"
+              aria-expanded={menus.isRosterOpen}
+              title={
+                menus.isRosterOpen
+                  ? 'Hide roster'
+                  : 'Launch an agent as one of your characters, or edit them'
+              }
+              // Enabled even when nothing can launch: a pick then edits.
+              style={{ width: ROSTER_ARROW_WIDTH_PX }}
+              className={`h-24 press-juice flex items-center justify-center border-2 border-l-bg/40 rounded-none select-none cursor-pointer ${
+                canLaunch
+                  ? `border-accent text-white ${menus.isRosterOpen || isCharactersOpen ? 'bg-accent-bright' : 'bg-accent hover:bg-accent-bright'}`
+                  : 'bg-btn-bg border-border text-text-muted'
+              }`}
             >
-              <PixelIcon name="down" scale={1} />
-            </span>
-          </button>
-        </div>
-        <Button
-          variant={isEditMode ? 'active' : 'default'}
-          onClick={onToggleEditMode}
-          title="Edit office layout"
-          className={`${ROW_HEIGHT} press-juice`}
-          icon="layout"
-        >
-          Layout
-        </Button>
-        {showSettings && (
+              <span
+                className={`flex transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${menus.isRosterOpen ? '' : 'rotate-180'}`}
+              >
+                <PixelIcon name="down" scale={1} />
+              </span>
+            </button>
+          </div>
+          <Button
+            variant={isEditMode ? 'active' : 'default'}
+            onClick={onToggleEditMode}
+            title="Edit office layout"
+            size="sm"
+            className={LABEL_BUTTON}
+            icon="layout"
+          >
+            Layout
+          </Button>
           <Button
             variant={isSettingsOpen ? 'active' : 'default'}
             onClick={onToggleSettings}
             title="Settings"
-            className={`${ROW_HEIGHT} press-juice`}
+            size="sm"
+            className={LABEL_BUTTON}
             icon="settings"
           >
             Settings
           </Button>
-        )}
+          {zoom !== undefined && <ZoomControls zoom={zoom} onZoomChange={onZoomChange} compact />}
+          {sidebar && (
+            <Button
+              size="icon_lg"
+              className="h-24! w-24!"
+              variant={sidebar.open ? 'active' : 'default'}
+              onClick={sidebar.onToggle}
+              aria-pressed={sidebar.open}
+              title={sidebar.open ? 'Hide conversations' : 'Show conversations'}
+            >
+              <PixelIcon name={sidebar.open ? 'sidebar' : 'sidebarShut'} />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

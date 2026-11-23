@@ -12,10 +12,12 @@ import {
   WANDER_PAUSE_MAX_SEC,
   WANDER_PAUSE_MIN_SEC,
 } from '../../constants.js';
+import { clinicIdentity } from '../clinicRuntime.js';
 import { jungleSprite } from '../jungleRuntime.js';
 import { findPath } from '../layout/tileMap.js';
 import { LIBRARY_WORK_SEAT } from '../libraryRuntime.js';
-import { serviceSprite } from '../serviceRuntime.js';
+import { nsiIdentity } from '../nsiRuntime.js';
+import { serviceIdentity, serviceSprite } from '../serviceRuntime.js';
 import type { CharacterSprites } from '../sprites/spriteData.js';
 import { getCharacterSprites } from '../sprites/spriteData.js';
 import { isReadingToolName } from '../toolUtils.js';
@@ -23,6 +25,7 @@ import type { Character, Seat, SpriteData, TileType as TileTypeVal } from '../ty
 import { CharacterState, Direction, TILE_SIZE } from '../types.js';
 import { startBlink } from './blink.js';
 import { toyPose } from './idlePlay.js';
+import { northPlayPose } from './northPlay.js';
 import { standingPlay } from './playMotion.js';
 
 /** Whether a tool should show the reading animation (vs typing). Taxonomy comes
@@ -427,11 +430,32 @@ function settle(ch: Character, facing: Direction | null): void {
 export function getCharacterSprite(ch: Character, sprites: CharacterSprites): SpriteData {
   if (ch.state === CharacterState.PLAY && ch.playTv)
     return getCharacterSprites(ch.palette, ch.repeat).seated[ch.dir];
-  if (ch.state === CharacterState.PLAY)
+  if (ch.state === CharacterState.PLAY) {
+    if (ch.dir === Direction.UP) {
+      const identity =
+        serviceIdentity(ch) ??
+        nsiIdentity(ch) ??
+        (clinicIdentity(ch)
+          ? 'takemi'
+          : [ch.directoryName, ch.agentName].some((n) =>
+                ['mitsuki', 'mitsuki takasawa'].includes(n?.trim().toLowerCase() ?? ''),
+              )
+            ? 'mitsuki'
+            : '');
+      return northPlayPose(
+        standingPlay(ch, 0) ??
+          serviceSprite(ch) ??
+          jungleSprite(ch) ??
+          sprites.walk[Direction.UP][1],
+        ch.frame,
+        identity,
+      );
+    }
     return (
       standingPlay(ch) ??
       toyPose(serviceSprite(ch) ?? jungleSprite(ch) ?? sprites.walk[ch.dir][1], ch.frame)
     );
+  }
   const service = serviceSprite(ch);
   if (service) return service;
   const jungle = jungleSprite(ch);

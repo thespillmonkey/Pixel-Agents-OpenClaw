@@ -120,7 +120,7 @@ it('reserves each toy exclusively, blocks its approach for other wanderers and n
   expect(p.spriteOverrides(1).size).toBe(0);
   expect(p.navigationBlocked(new Set()).size).toBe(7);
 });
-it('starts the toy only on arrival, plays for 20–40 seconds, then releases it and resumes idle', () => {
+it('starts the toy only on arrival, plays for 5–7 minutes, then releases it and resumes idle', () => {
   const p = new IdlePlay(() => 0),
     ch = actor(),
     ctx = context(ch);
@@ -133,7 +133,9 @@ it('starts the toy only on arrival, plays for 20–40 seconds, then releases it 
   expect(ch.seatId).toBe(home);
   expect(p.playingIds().size).toBe(1);
   expect(p.spriteOverrides(1).size).toBe(1);
-  for (let i = 0; i < 401; i++) p.update(ch, 0.05, ctx);
+  p.update(ch, 299, ctx);
+  expect(p.sessions.size).toBe(1);
+  p.update(ch, 1.1, ctx);
   expect(p.sessions.size).toBe(0);
   expect(ch.state).toBe(CharacterState.IDLE);
   expect(p.spriteOverrides(1).size).toBe(0);

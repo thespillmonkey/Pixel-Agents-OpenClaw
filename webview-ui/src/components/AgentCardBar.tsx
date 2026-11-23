@@ -7,6 +7,7 @@ import { AgentCardList } from './AgentCardList.js';
 interface AgentCardBarProps {
   /** Agents to show, top to bottom (the shared card order). */
   agentIds: number[];
+  horizontal: boolean;
   /** The agent whose terminal pane is showing (standalone). Its card gets the
    *  accent border. */
   activeAgentId?: number | null;
@@ -24,11 +25,10 @@ interface AgentCardBarProps {
 }
 
 /**
- * The column of agent cards along the office's right edge — the desktop
- * wrapping of AgentCardList, shared by both desktop hosts. The phone shows
- * the same cards, in the same order, as a row (MobileAgentBar).
+ * Desktop agent cards in a scrollable top row or overlaid at the office's
+ * right edge. Both orientations reuse the shared card order and interactions.
  *
- * Transparent and borderless, drawn on top of the office space: the negative
+ * The right-edge column is transparent and borderless: the negative
  * margin exactly cancels the column's width, so it takes no layout room and
  * overlays the office's right edge as a flex sibling of the office region.
  * Pointer events pass through the empty parts so the office stays clickable
@@ -40,6 +40,7 @@ interface AgentCardBarProps {
  */
 export function AgentCardBar({
   agentIds,
+  horizontal,
   activeAgentId = null,
   focusedAgentId = null,
   getAppearance,
@@ -52,9 +53,17 @@ export function AgentCardBar({
   return (
     <AgentCardList
       agentIds={agentIds}
-      axis="y"
-      className="relative z-30 h-full shrink-0 flex flex-col items-center gap-4 pt-4 overflow-y-auto pointer-events-none"
-      style={{ width: TERMINAL_SIDEBAR_WIDTH_PX, marginLeft: -TERMINAL_SIDEBAR_WIDTH_PX }}
+      axis={horizontal ? 'x' : 'y'}
+      className={
+        horizontal
+          ? 'relative z-30 w-full min-w-0 shrink-0 flex items-center gap-4 px-8 pt-6 pb-4 overflow-x-auto overflow-y-hidden quiet-scrollbar-x bg-bg border-b-2 border-border'
+          : 'relative z-30 h-full shrink-0 flex flex-col items-center gap-4 pt-4 overflow-y-auto pointer-events-none'
+      }
+      style={
+        horizontal
+          ? undefined
+          : { width: TERMINAL_SIDEBAR_WIDTH_PX, marginLeft: -TERMINAL_SIDEBAR_WIDTH_PX }
+      }
       onReorder={onReorder}
       activeAgentId={activeAgentId}
       focusedAgentId={focusedAgentId}
